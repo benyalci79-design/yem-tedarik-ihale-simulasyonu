@@ -21,7 +21,13 @@ async def lifespan(app: FastAPI):
         await stop_runtime(task)
 
 
-app = FastAPI(title="Yem İhale Simülasyonu", version="4.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Yem İhale Simülasyonu",
+    version="4.0.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+)
 app.include_router(simulation.router)
 app.include_router(products.router)
 app.include_router(npc_rules.router)
