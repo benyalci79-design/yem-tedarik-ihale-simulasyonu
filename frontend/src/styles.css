@@ -8,3 +8,13 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
 button, input, select { font: inherit; }
+.app-shell { min-height: 100vh; }
+.topbar { display:flex; align-items:center; justify-content:space-between; gap:2rem; padding:1rem clamp(1rem,4vw,4rem); background:#111827; color:#fff; }
+.brand { display:flex; align-items:center; gap:.7rem; color:#fff; text-decoration:none; font-weight:850; font-size:1.05rem; }
+.brand small { display:block; color:#bfdbfe; font-size:.75rem; font-weight:600; }
+.brand-mark { display:grid; place-items:center; width:2.2rem; height:2.2rem; border-radius:.65rem; color:#fff; background:#1d4ed8; }
+nav { display:flex; gap:.35rem; flex-wrap:wrap; }
+nav a { color:#d1d5db; text-decoration:none; padding:.55rem .75rem; border-radius:.5rem; font-size:.9rem; font-weight:700; }
+nav a:hover, nav a.active { color:#fff; background:#374151; }
+.page-wrap { width:min(1280px, calc(100% - 2rem)); margin:0 auto; padding:2.5rem 0 4rem; }
+@media(max-width:760px){.topbar{align-items:flex-start; flex-direction:column; gap:1rem}.page-wrap{padding-top:1.5rem}}
