@@ -34,8 +34,11 @@ app.add_exception_handler(Exception, generic_error_handler)
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
     if isinstance(exc.detail, dict) and "error" in exc.detail:
-        return JSONResponse(exc.status_code, exc.detail)
-    return JSONResponse(exc.status_code, {"error": {"code": "HTTP_ERROR", "message": str(exc.detail)}})
+        return JSONResponse(content=exc.detail, status_code=exc.status_code)
+    return JSONResponse(
+        content={"error": {"code": "HTTP_ERROR", "message": str(exc.detail)}},
+        status_code=exc.status_code,
+    )
 
 
 @app.get("/api/v1/health")

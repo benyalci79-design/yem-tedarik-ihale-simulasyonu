@@ -17,12 +17,12 @@ def error_body(code: str, message: str) -> dict:
 
 
 async def api_error_handler(_request: Request, exc: ApiError) -> JSONResponse:
-    return JSONResponse(exc.status_code, error_body(exc.code, exc.message))
+    return JSONResponse(content=error_body(exc.code, exc.message), status_code=exc.status_code)
 
 
 async def validation_error_handler(_request: Request, _exc: ValidationError) -> JSONResponse:
-    return JSONResponse(422, error_body("VALIDATION_ERROR", "Gönderilen alanları kontrol edin."))
+    return JSONResponse(content=error_body("VALIDATION_ERROR", "Gönderilen alanları kontrol edin."), status_code=422)
 
 
 async def generic_error_handler(_request: Request, _exc: Exception) -> JSONResponse:
-    return JSONResponse(500, error_body("INTERNAL_ERROR", "İşlem gerçekleştirilemedi."))
+    return JSONResponse(content=error_body("INTERNAL_ERROR", "İşlem gerçekleştirilemedi."), status_code=500)
