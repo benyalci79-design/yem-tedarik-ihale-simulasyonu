@@ -1,18 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import (
-    BIGINT,
-    BOOLEAN,
-    DECIMAL,
-    DATETIME,
-    INTEGER,
-    SMALLINT,
-    VARCHAR,
-    ForeignKey,
-    Index,
-    UniqueConstraint,
-)
+from sqlalchemy import BOOLEAN, ForeignKey, Index, UniqueConstraint
+from sqlalchemy.dialects.mysql import BIGINT, DATETIME, DECIMAL, INTEGER, SMALLINT, VARCHAR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base

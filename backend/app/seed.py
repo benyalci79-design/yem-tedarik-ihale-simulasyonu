@@ -3,7 +3,7 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import NpcRule, NpcSupplier, Product
+from app.models import NpcRule, NpcSupplier, Product, SimulationState
 
 PRODUCTS = (
     ("MISR", "Dane Mısır", Decimal("900"), Decimal("100"), Decimal("10"), Decimal("30"), 60),
@@ -25,6 +25,10 @@ PRICE_RANGES = {
 def main() -> None:
     """Eksik seed kayıtlarını ekler; var olan ayarları ve planları değiştirmez."""
     with SessionLocal.begin() as db:
+        state = db.get(SimulationState, 1)
+        if state is None:
+            db.add(SimulationState(id=1, is_running=False, elapsed_seconds=Decimal("0")))
+
         products_by_code: dict[str, Product] = {}
         for code, name, stock, consumption, critical, target, window in PRODUCTS:
             product = db.scalar(select(Product).where(Product.code == code))
