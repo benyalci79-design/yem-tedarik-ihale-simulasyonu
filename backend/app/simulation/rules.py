@@ -36,3 +36,15 @@ def tender_quantity_ton(
 ) -> Decimal:
     target_stock_kg = target_coverage_minutes * consumption_kg_per_min
     return round_up_ton(max(ZERO, target_stock_kg - stock_kg))
+
+
+def deliver_stock_once(
+    status: str,
+    delivered_at_seconds: Decimal | None,
+    stock_kg: Decimal,
+    quantity_ton: Decimal,
+) -> tuple[Decimal, str, bool]:
+    """Teslimatın AWARDED -> DELIVERED geçişinde yalnız bir kez stok ekler."""
+    if status != "AWARDED" or delivered_at_seconds is not None:
+        return stock_kg, status, False
+    return stock_kg + quantity_ton * TON_KG, "DELIVERED", True

@@ -11,7 +11,8 @@ from app.db import SessionLocal
 from app.models import NpcRule, Product, SimulationState, Tender, TenderParticipation
 from app.simulation.evaluation import CandidateOffer, evaluate_offers
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
-from app.simulation.rules import consume_stock, coverage_minutes, tender_quantity_ton
+from app.simulation.rules import consume_stock, coverage_minutes, deliver_stock_once, tender_quantity_ton
+from app.simulation.timeline import TimelineEvent, ordered_events
 
 ACTIVE_STATUSES = ("OPEN", "EVALUATION", "AWARDED")
 ZERO = Decimal("0")
@@ -134,11 +135,13 @@ class SimulationEngine:
             event_time = min(event[0] for event in events)
             self._consume_all(db, event_time - cursor)
             cursor = event_time
-            for _time, priority, kind, object_id in sorted(
-                [event for event in events if event[0] == event_time],
-                key=lambda event: event[1],
-            ):
-                self._process_event(db, kind, object_id, cursor)
+            same_time = [
+                TimelineEvent(at_seconds=event[0], kind=event[2], object_id=event[3])
+                for event in events
+                if event[0] == event_time
+            ]
+            for event in ordered_events(same_time):
+                self._process_event(db, event.kind, event.object_id, cursor)
 
         state = db.get(SimulationState, 1, with_for_update=True)
         if state is not None:
@@ -274,9 +277,16 @@ class SimulationEngine:
         product = db.get(Product, tender.product_id, with_for_update=True)
         if product is None:
             return
-        product.current_stock_kg = Decimal(product.current_stock_kg) + Decimal(tender.quantity_ton) * Decimal("1000")
-        tender.delivered_at_seconds = event_time
-        tender.status = "DELIVERED"
+        new_stock, new_status, changed = deliver_stock_once(
+            tender.status,
+            tender.delivered_at_seconds,
+            Decimal(product.current_stock_kg),
+            Decimal(tender.quantity_ton),
+        )
+        if changed:
+            product.current_stock_kg = new_stock
+            tender.delivered_at_seconds = event_time
+            tender.status = new_status
 
     def _open_needed_tenders(self, db, now: Decimal) -> None:
         products = db.scalars(select(Product).order_by(Product.id)).all()

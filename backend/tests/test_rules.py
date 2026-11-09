@@ -5,9 +5,11 @@ from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
     consume_stock,
     coverage_minutes,
+    deliver_stock_once,
     round_up_ton,
     tender_quantity_ton,
 )
+from app.simulation.timeline import TimelineEvent, ordered_events
 
 
 class FixedRng:
@@ -77,3 +79,24 @@ def test_emergency_acceptance():
 def test_equal_boundary_is_eligible():
     result = evaluate_offers([CandidateOffer(1, 1, Decimal("8000"), 3)], Decimal("3.5"))
     assert result.winner_id == 1
+
+
+def test_delivery_is_idempotent():
+    stock, status, changed = deliver_stock_once("AWARDED", None, Decimal("0"), Decimal("2.100"))
+    assert (stock, status, changed) == (Decimal("2100.000"), "DELIVERED", True)
+    assert deliver_stock_once("DELIVERED", Decimal("10"), stock, Decimal("2.100")) == (stock, "DELIVERED", False)
+
+
+def test_long_tick_event_order_is_chronological_and_prioritized():
+    ordered = ordered_events([
+        TimelineEvent(Decimal("20"), "evaluate", 1),
+        TimelineEvent(Decimal("10"), "close", 1),
+        TimelineEvent(Decimal("10"), "delivery", 2),
+        TimelineEvent(Decimal("10"), "response", 4),
+    ])
+    assert [(event.at_seconds, event.kind) for event in ordered] == [
+        (Decimal("10"), "delivery"),
+        (Decimal("10"), "response"),
+        (Decimal("10"), "close"),
+        (Decimal("20"), "evaluate"),
+    ]

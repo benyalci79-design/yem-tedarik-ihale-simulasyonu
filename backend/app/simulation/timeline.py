@@ -1,0 +1,21 @@
+from dataclasses import dataclass
+from decimal import Decimal
+
+EVENT_PRIORITY = {
+    "delivery": 0,
+    "response": 2,
+    "close": 3,
+    "evaluate": 4,
+}
+
+
+@dataclass(frozen=True)
+class TimelineEvent:
+    at_seconds: Decimal
+    kind: str
+    object_id: int
+
+
+def ordered_events(events: list[TimelineEvent]) -> list[TimelineEvent]:
+    """Aynı anda olayları şartnamedeki işlem sırasına göre düzenler."""
+    return sorted(events, key=lambda event: (event.at_seconds, EVENT_PRIORITY[event.kind], event.object_id))
