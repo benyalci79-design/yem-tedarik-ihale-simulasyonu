@@ -4,7 +4,7 @@ Revision ID: 0001_initial_schema
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.mysql import BIGINT
+from sqlalchemy.dialects.mysql import BIGINT, DATETIME
 
 revision = "0001_initial_schema"
 down_revision = None
@@ -46,7 +46,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("is_running", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("elapsed_seconds", sa.Numeric(16, 3), nullable=False, server_default="0"),
-        sa.Column("last_tick_at", sa.DateTime(fsp=6), nullable=True),
+        sa.Column("last_tick_at", DATETIME(fsp=6), nullable=True),
         sa.Column("last_error", sa.String(500), nullable=True),
         mysql_engine="InnoDB",
         mysql_charset="utf8mb4",
@@ -86,7 +86,7 @@ def upgrade() -> None:
         sa.Column("evaluated_consumption_kg_per_min", sa.Numeric(12, 3), nullable=True),
         sa.Column("evaluated_coverage_minutes", sa.Numeric(16, 6), nullable=True),
         sa.Column("result_reason", sa.String(500), nullable=True),
-        sa.Column("created_at", sa.DateTime(fsp=6), nullable=False),
+        sa.Column("created_at", DATETIME(fsp=6), nullable=False),
         sa.ForeignKeyConstraint(["product_id"], ["products.id"], ondelete="RESTRICT"),
         sa.UniqueConstraint("code", name="uq_tenders_code"),
         mysql_engine="InnoDB",
