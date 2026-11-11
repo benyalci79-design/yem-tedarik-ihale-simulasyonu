@@ -20,7 +20,7 @@ import { numberTr, statusLabel } from '../../shared/display';
     <div *ngIf="loading && !simulation" class="skeleton-grid"><div class="skeleton" *ngFor="let item of [1, 2, 3]"></div></div>
 
     <ng-container *ngIf="simulation as state">
-      <section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ numberTr(state.elapsed_seconds, 1) }} sn</strong><span class="hero-caption">{{ activityHeadline }}</span></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section>
+      <section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ numberTr(displayElapsedSeconds, 1) }} sn</strong><span class="hero-caption">{{ activityHeadline }}</span></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section>
       <div *ngIf="state.last_error" class="alert">{{ state.last_error }}</div>
       <section class="flow-card"><div class="section-heading"><div><h2>Canlı süreç akışı</h2><p>{{ activityDescription }}</p></div><span class="live-indicator" [class.paused]="!state.is_running"><i></i>{{ state.is_running ? 'CANLI' : 'DURAKLATILDI' }}</span></div><div class="flow-steps"><div *ngFor="let step of flowSteps; let index = index" class="flow-step" [class.done]="index < flowStep" [class.current]="index === flowStep" [class.pending]="index > flowStep"><span class="step-dot">{{ index < flowStep ? '✓' : index + 1 }}</span><strong>{{ step }}</strong><span>{{ flowStepText(index) }}</span></div></div></section>
       <section class="summary-grid"><article><span>İzlenen ürün</span><strong>{{ products.length }}</strong><small>stok kartı</small></article><article><span>Aktif ihale</span><strong>{{ activeTenders.length }}</strong><small>şu anda işlemde</small></article><article><span>Toplam ihale</span><strong>{{ tenders.length }}</strong><small>simülasyon geçmişi</small></article></section>
@@ -42,11 +42,17 @@ export class DashboardComponent {
   loading = true;
   actionLoading = false;
   error = '';
+  displayElapsedSeconds = '0.000';
+  private elapsedAnchorSeconds = 0;
+  private elapsedAnchorTime = performance.now();
   readonly Number = Number;
   readonly numberTr = numberTr;
   readonly flowSteps = ['Simülasyon', 'Stok analizi', 'İhale açılışı', 'Değerlendirme', 'Teslimat'];
 
-  constructor() { this.startPolling(); }
+  constructor() {
+    this.startPolling();
+    this.startDisplayClock();
+  }
 
   get activeTenders(): TenderSummary[] { return this.tenders.filter(tender => ['OPEN', 'EVALUATION', 'AWARDED'].includes(tender.status)); }
 
@@ -108,24 +114,32 @@ export class DashboardComponent {
     if (this.actionLoading || this.loading || this.simulation?.is_running) return;
     this.actionLoading = true;
     this.error = '';
-    this.api.startSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.simulation = state; this.loading = false; }, error: () => this.error = 'Simülasyon başlatılamadı. Backend bağlantısını kontrol edin.' });
+    this.api.startSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.setSimulation(state); this.loading = false; }, error: () => this.error = 'Simülasyon başlatılamadı. Backend bağlantısını kontrol edin.' });
   }
 
   pause(): void {
     if (this.actionLoading || this.loading || !this.simulation?.is_running) return;
     this.actionLoading = true;
     this.error = '';
-    this.api.pauseSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.simulation = state; this.loading = false; }, error: () => this.error = 'Simülasyon duraklatılamadı. Backend bağlantısını kontrol edin.' });
+    this.api.pauseSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.setSimulation(state); this.loading = false; }, error: () => this.error = 'Simülasyon duraklatılamadı. Backend bağlantısını kontrol edin.' });
   }
 
   private startPolling(): void {
     timer(0, 2000).pipe(switchMap(() => this.loadSnapshot().pipe(catchError(() => { this.showLoadError(); return EMPTY; }))), takeUntilDestroyed(this.destroyRef)).subscribe(snapshot => this.applySnapshot(snapshot));
   }
 
+  private startDisplayClock(): void {
+    timer(0, 250).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      if (!this.simulation) return;
+      const runningSeconds = this.simulation.is_running ? (performance.now() - this.elapsedAnchorTime) / 1000 : 0;
+      this.displayElapsedSeconds = Math.max(0, this.elapsedAnchorSeconds + runningSeconds).toFixed(3);
+    });
+  }
+
   private loadSnapshot() { return forkJoin({ simulation: this.api.simulation(), products: this.api.products(), tenders: this.api.tenders() }); }
 
   private applySnapshot(snapshot: { simulation: SimulationState; products: { items: Product[] }; tenders: { items: TenderSummary[] } }): void {
-    this.simulation = snapshot.simulation;
+    this.setSimulation(snapshot.simulation);
     this.products = snapshot.products.items;
     this.tenders = snapshot.tenders.items;
     this.loading = false;
@@ -133,4 +147,11 @@ export class DashboardComponent {
   }
 
   private showLoadError(): void { this.error = 'Backend bağlantısını kontrol edin.'; this.loading = false; }
+
+  private setSimulation(state: SimulationState): void {
+    this.simulation = state;
+    this.elapsedAnchorSeconds = Number(state.elapsed_seconds) || 0;
+    this.elapsedAnchorTime = performance.now();
+    this.displayElapsedSeconds = this.elapsedAnchorSeconds.toFixed(3);
+  }
 }
