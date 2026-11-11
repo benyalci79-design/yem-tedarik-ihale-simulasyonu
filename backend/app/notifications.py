@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.budget import budget_state, elapsed_seconds
 from app.models import Product, Tender, TenderAward
+from app.season import current_progress
 from app.simulation.rules import coverage_minutes, season_factor, season_phase
 
 ZERO = Decimal("0")
@@ -43,7 +44,7 @@ def build_notifications(db: Session) -> list[dict]:
                 )
             )
         factor = season_factor(
-            elapsed, Decimal(product.season_amplitude), season_phase(product.id)
+            current_progress(db), Decimal(product.season_amplitude), season_phase(product.id)
         )
         if factor >= Decimal("1.05"):
             items.append(

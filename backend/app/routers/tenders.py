@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.budget import budget_state
+from app.season import current_progress
 from app.db import SessionLocal, get_db
 from app.errors import ApiError
 from app.inventory import free_capacity
@@ -116,7 +117,7 @@ def _base_tender(db: Session, tender: Tender, elapsed: Decimal) -> dict:
     remaining = remaining_need_kg(Decimal(tender.quantity_ton), accepted_total)
     product = tender.product
     season = season_factor(
-        elapsed,
+        current_progress(db),
         Decimal(product.season_amplitude),
         season_phase(product.id),
     )

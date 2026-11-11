@@ -149,6 +149,17 @@ class SpeedRequest(BaseModel):
     speed: Literal["0.5", "1", "2", "3"]
 
 
+class SeasonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    progress: Decimal = Field(ge=0, le=1, max_digits=6, decimal_places=4)
+
+    @field_validator("progress")
+    @classmethod
+    def validate_four_places(cls, value: Decimal) -> Decimal:
+        return _max_places(value, 4)
+
+
 class CarrierAssign(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

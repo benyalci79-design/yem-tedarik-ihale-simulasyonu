@@ -44,6 +44,12 @@ export class ApiService {
     return this.http.post<SimulationState>(this.base + '/simulation/speed', { speed });
   }
 
+  setSeason(progress: number): Observable<SimulationState> {
+    return this.http.post<SimulationState>(this.base + '/simulation/season', {
+      progress: progress.toFixed(4),
+    });
+  }
+
   resetSimulation(): Observable<SimulationState> {
     return this.http.post<SimulationState>(this.base + '/simulation/reset', {});
   }

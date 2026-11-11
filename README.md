@@ -74,7 +74,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
 - **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
 - **Fire:** Her ürünün `loss_percent` oranı vardır (MISR %1, ARPA %0,5, SOYA %1,5). Teslimatta kabul edilen kg `quantity × (1 − fire)` olur; ödenen tutar değişmediği için **birim maliyet yükselir**. Fire miktarı award'da `loss_kg` olarak saklanır.
-- **Mevsimsellik:** Her ürünün `season_amplitude` genliği vardır. Teklif fiyatı, açılış anındaki `1 + genlik × sin(2π t / 3600 + faz)` katsayısıyla üretilir; katsayı teklifte `season_factor` olarak saklanır. Böylece aynı NPC farklı dönemlerde farklı fiyat verir.
+- **Mevsimsellik:** Mevsim ilerlemesi (`simulation_state.season_progress`, 0–1) simülasyon zamanıyla yavaşça artar (1 sim saati = 1 yıl) ve üst bardaki **mevsim timeline'ından sürüklenerek** elle değiştirilebilir. Her ürünün `season_amplitude` genliği vardır; teklif fiyatı `1 + genlik × sin(2π ilerleme + faz)` katsayısıyla üretilir ve teklifte `season_factor` olarak saklanır. Böylece aynı NPC farklı mevsimlerde farklı fiyat verir.
 - **Bütçe:** Aylık (3600 sim saniyelik dönem) satın alma limiti `budgets` tablosunda tutulur (varsayılan 500.000 TL). Dönem harcaması, kabul edilen award'ların maliyetiyle hesaplanır; %80'de uyarı, limit aşımında teklif kabulü `422 BUDGET_EXCEEDED` ile reddedilir. Limit `PATCH /budget` ile (simülasyon duraklatılmışken) değiştirilir.
 - **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
 - **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; ardından **demo geçmişini** (5 tamamlanmış ihale, award'ları ve stok geçmişi) yeniden yükler. Saat bu geçmişin bittiği ana (1800 sn) alınır, hız 1x olur ve simülasyon duraklatılır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
@@ -93,7 +93,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 `/api/v1` altında:
 
 - `GET /health`
-- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`, `/simulation/reset`
+- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`, `/simulation/season`, `/simulation/reset`
 - `GET /products`, `PATCH /products/{id}` (kapasite, ortalama maliyet ve son alım birim fiyatı dahil)
 - `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}` (nakliye modu, mevcut miktar aralığı dahil)
 - `GET /tenders?product_id=&status=`, `POST /tenders`
@@ -159,7 +159,7 @@ Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, ola
 - `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
 - `/suppliers`: Tedarikçiler — NPC performans skorları (fiyat rekabeti, katılım, kazanma oranı, ortalama teslim süresi).
 
-Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati, onay penceresi açan **Sıfırla** düğmesi ve **bildirim zili** (okunmamış sayacı + panel) tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
+Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati, onay penceresi açan **Sıfırla** düğmesi ve **bildirim zili** (okunmamış sayacı + panel) tüm ekranlarda görünür. Üst bar ve altındaki **mevsim timeline'ı** sayfa kaydırıldığında sabit kalır (sticky); timeline sürüklenerek mevsim (İlkbahar/Yaz/Sonbahar/Kış) değiştirilebilir. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
 
 ## Frontend notları
 
@@ -192,6 +192,7 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 18. **PASS** — Tedarikçi skorcard: 10 NPC için skor üretildi (NPC-A 91 … NPC-C/I 0); `/suppliers` tablosu skor çubuğu ve metriklerle render edildi.
 19. **PASS** — Bildirim kutusu: 5 aktif bildirim (kritik stok, karar bekleyen ihale, sezon) üretildi; zil sayacı 5, panel 5 satır gösterdi, konsol hatası yok.
 20. **PASS** — İzole dev ortamı: 18080/18000 ayrı stack ve ayrı veritabanı; ana demo 8080 sağlıklı kaldı.
+21. **PASS** — Mevsim timeline'ı: 0,75'e sürüklendiğinde `season_progress=0.7500`, etiket "Kış" oldu ve sunucuya yazıldı; 3x hızda 10 sn'de ilerleme 0 → 0,0076 (otomatik akış); üst bar `position: sticky` doğrulandı.
 
 ## Veri kalıcılığı
 

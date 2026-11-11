@@ -137,22 +137,33 @@ def apply_loss(quantity_kg: Decimal, loss_percent: Decimal) -> Decimal:
 
 
 def season_phase(product_id: int) -> float:
-    """Ürünlere dengeli dağılmış mevsim fazı (radyan)."""
     import math
 
     return (product_id % 3) * (2 * math.pi / 3)
 
 
+def season_label(progress: Decimal) -> str:
+    """0..1 mevsim ilerlemesini Türkçe mevsim adına çevirir."""
+    value = float(progress) % 1.0
+    if value < 0.25:
+        return "İlkbahar"
+    if value < 0.5:
+        return "Yaz"
+    if value < 0.75:
+        return "Sonbahar"
+    return "Kış"
+
+
 def season_factor(
-    elapsed_seconds: Decimal,
+    progress: Decimal,
     amplitude_percent: Decimal,
     phase_radians: float,
 ) -> Decimal:
-    """Mevsimsel fiyat katsayısı: 1 + genlik * sin(2π t / periyot + faz)."""
+    """Mevsimsel fiyat katsayısı: 1 + genlik * sin(2π ilerleme + faz)."""
     import math
 
     if amplitude_percent <= ZERO:
         return Decimal("1")
-    angle = 2 * math.pi * float(elapsed_seconds) / float(SEASON_PERIOD_SECONDS) + phase_radians
+    angle = 2 * math.pi * float(progress) + phase_radians
     factor = Decimal("1") + (amplitude_percent / Decimal("100")) * Decimal(str(math.sin(angle)))
     return factor.quantize(SIX_PLACES, rounding=ROUND_HALF_UP)

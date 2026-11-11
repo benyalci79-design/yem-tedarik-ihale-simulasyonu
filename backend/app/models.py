@@ -80,6 +80,7 @@ class SimulationState(Base):
     last_tick_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     last_error: Mapped[str | None] = mapped_column(VARCHAR(500), nullable=True)
     speed_multiplier: Mapped[Decimal] = mapped_column(DECIMAL(4, 2), nullable=False, server_default="1.00")
+    season_progress: Mapped[Decimal] = mapped_column(DECIMAL(6, 4), nullable=False, server_default="0")
 
 
 class Tender(Base):

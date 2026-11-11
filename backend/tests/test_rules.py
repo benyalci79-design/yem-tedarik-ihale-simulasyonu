@@ -18,6 +18,7 @@ from app.simulation.rules import (
     remaining_need_kg,
     round_up_ton,
     season_factor,
+    season_label,
     season_phase,
     tender_quantity_ton,
     weighted_average_cost,
@@ -152,11 +153,18 @@ def test_apply_loss_reduces_accepted_quantity():
     assert apply_loss(Decimal("1200.500"), Decimal("0.50")) == Decimal("1194.497500")
 
 
-def test_season_factor_follows_period():
+def test_season_factor_follows_progress():
     assert season_factor(Decimal("0"), Decimal("10"), 0.0) == Decimal("1.000000")
-    assert season_factor(Decimal("900"), Decimal("10"), 0.0) == Decimal("1.100000")
-    assert season_factor(Decimal("2700"), Decimal("10"), 0.0) == Decimal("0.900000")
-    assert season_factor(Decimal("900"), Decimal("0"), 0.0) == Decimal("1")
+    assert season_factor(Decimal("0.25"), Decimal("10"), 0.0) == Decimal("1.100000")
+    assert season_factor(Decimal("0.75"), Decimal("10"), 0.0) == Decimal("0.900000")
+    assert season_factor(Decimal("0.25"), Decimal("0"), 0.0) == Decimal("1")
+
+
+def test_season_label_cycles():
+    assert season_label(Decimal("0.10")) == "İlkbahar"
+    assert season_label(Decimal("0.35")) == "Yaz"
+    assert season_label(Decimal("0.60")) == "Sonbahar"
+    assert season_label(Decimal("0.90")) == "Kış"
 
 
 def test_season_phase_spreads_products():

@@ -19,6 +19,7 @@ from app.models import (
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
 from app.seed import restore_defaults
 from app.simulation.rules import (
+    SEASON_PERIOD_SECONDS,
     apply_loss,
     can_deliver_award,
     consume_stock,
@@ -121,6 +122,15 @@ class SimulationEngine:
                 state.last_error = None
                 return state
 
+    def set_season_progress(self, progress: Decimal) -> SimulationState:
+        with self._lock, self.session_factory.begin() as db:
+            state = db.get(SimulationState, 1, with_for_update=True)
+            if state is None:
+                state = SimulationState(id=1, is_running=False, elapsed_seconds=ZERO)
+                db.add(state)
+            state.season_progress = progress
+            return state
+
     def reset(self) -> SimulationState:
         """Simülasyonu başlangıç durumuna döndürür.
 
@@ -145,6 +155,7 @@ class SimulationEngine:
                 db.add(state)
             state.is_running = False
             state.elapsed_seconds = baseline if baseline is not None else ZERO
+            state.season_progress = ZERO
             state.last_tick_at = None
             state.last_error = None
             state.speed_multiplier = Decimal("1.00")
@@ -178,6 +189,9 @@ class SimulationEngine:
             state.elapsed_seconds = target
             state.last_tick_at = now
             state.last_error = None
+            state.season_progress = (
+                (Decimal(state.season_progress) + delta / SEASON_PERIOD_SECONDS) % Decimal("1")
+            ).quantize(Decimal("0.0001"))
             self._write_snapshots(db, target)
             db.commit()
             return state
@@ -279,8 +293,10 @@ class SimulationEngine:
         ):
             return
         product = tender.product
+        state = db.get(SimulationState, 1)
+        progress = Decimal(state.season_progress) if state is not None else ZERO
         season = season_factor(
-            event_time,
+            progress,
             Decimal(product.season_amplitude),
             season_phase(product.id),
         )
