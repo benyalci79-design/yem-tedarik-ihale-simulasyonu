@@ -53,6 +53,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
 - **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
 - **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
+- **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; saati 0'a alır, hızı 1x yapar ve simülasyonu duraklatır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
 
 ## Maliyet hesabı
 
@@ -67,7 +68,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 `/api/v1` altında:
 
 - `GET /health`
-- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`
+- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`, `/simulation/reset`
 - `GET /products`, `PATCH /products/{id}` (kapasite, ortalama maliyet ve son alım birim fiyatı dahil)
 - `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}` (nakliye modu, mevcut miktar aralığı dahil)
 - `GET /tenders?product_id=&status=`, `POST /tenders`
@@ -126,7 +127,7 @@ Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, ola
 - `/tenders/:id`: İhale Detayı — üstte **kompakt stok şeridi** (depo doluluğu, yoldaki miktar, boş kapasite, **son alım birim fiyatı**, ortalama maliyet), gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, "İhaleyi tamamla", teslimat/award listesi.
 - `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
 
-Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**) ve simülasyon saati tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
+Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati ve onay penceresi açan **Sıfırla** düğmesi tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
 
 ## Frontend notları
 
@@ -150,6 +151,7 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 9. **PASS** — Testler/derleme: `pytest -q` 19 passed; `npm test` (üretim derlemesi) başarılı; 6 route headless Chrome'da hatasız render edildi.
 10. **PASS** — Migration: dolu veritabanında `alembic upgrade head` çalıştı; backfill (kapasite/maliyet) uygulandı, veri kaybı olmadı.
 11. **PASS** — Birim fiyat korunması: stok 0 iken MISR `avg_cost_per_kg=8.360075` ve `last_purchase_unit_price=8.360075` döndü (0 değil); 1.000 kg teslim alınınca ikisi de 9,060270 oldu; depo boşken toplam birim fiyat `_last_known_avg` ile korunuyor (birim testi).
+12. **PASS** — Sıfırlama: 24 ihale ve 4 award varken `POST /simulation/reset` sonrası ihale/teslimat/geçmiş 0, ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 0, hız 1x, durum duraklatıldı. Arayüzde Sıfırla → onay penceresi → "Vazgeç" kapatıyor, "Evet, sıfırla" sonrası sayfa `/` adresine dönüp 0,0 sn gösteriyor.
 
 ## Veri kalıcılığı
 

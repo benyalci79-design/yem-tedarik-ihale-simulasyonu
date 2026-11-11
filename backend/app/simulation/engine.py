@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, Protocol
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.db import SessionLocal
 from app.models import (
@@ -17,6 +17,7 @@ from app.models import (
     TenderParticipation,
 )
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
+from app.seed import restore_defaults
 from app.simulation.rules import can_deliver_award, consume_stock, weighted_average_cost
 from app.simulation.timeline import TimelineEvent, ordered_events
 
@@ -113,6 +114,37 @@ class SimulationEngine:
                 state.last_tick_at = self.clock.now()
                 state.last_error = None
                 return state
+
+    def reset(self) -> SimulationState:
+        """Simülasyonu başlangıç durumuna döndürür.
+
+        Tüm ihaleler, teklifler, award'lar ve stok geçmişi silinir; ürün, NPC
+        kuralı ve nakliyeci değerleri seed başlangıç değerlerine çekilir. Saat
+        sıfırlanır, hız 1x olur ve simülasyon duraklatılır.
+        """
+        with self._lock, self.session_factory.begin() as db:
+            state = db.get(SimulationState, 1, with_for_update=True)
+            # FK sırası: önce award'lar, sonra teklifin kazanan işaretçisi,
+            # ardından katılımlar ve ihaleler.
+            db.execute(update(Tender).values(winning_participation_id=None))
+            db.execute(delete(TenderAward))
+            db.execute(delete(TenderParticipation))
+            db.execute(delete(Tender))
+            db.execute(delete(StockSnapshot))
+            db.flush()
+
+            restore_defaults(db)
+
+            if state is None:
+                state = SimulationState(id=1, is_running=False, elapsed_seconds=ZERO)
+                db.add(state)
+            state.is_running = False
+            state.elapsed_seconds = ZERO
+            state.last_tick_at = None
+            state.last_error = None
+            state.speed_multiplier = Decimal("1.00")
+            db.flush()
+            return state
 
     def tick_once(self) -> SimulationState | None:
         with self._lock:

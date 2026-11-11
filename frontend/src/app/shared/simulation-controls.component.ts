@@ -1,14 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, inject } from '@angular/core';
+import { Component, DestroyRef, HostListener, inject } from '@angular/core';
 import { catchError, EMPTY, finalize, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ApiService } from '../core/api.service';
+import { ApiService, apiErrorMessage } from '../core/api.service';
 import { SimulationState } from '../core/models';
 import { numberTr } from './display';
 
 /**
- * Üst barda duran ortak simülasyon kontrolü: Dur · 0,5x · 1x · 2x · 3x.
- * Seçili hız vurgulanır; simülasyon saati seçili hızla ilerler.
+ * Üst barda duran ortak simülasyon kontrolü: Dur · 0,5x · 1x · 2x · 3x ve
+ * onay isteyen "Sıfırla" düğmesi. Sıfırlama tüm veriyi başlangıç durumuna
+ * döndürür; onay penceresi olmadan çalışmaz.
  */
 @Component({
   selector: 'app-simulation-controls',
@@ -29,7 +30,26 @@ import { numberTr } from './display';
           (click)="setSpeed(speed)"
         >{{ speedLabel(speed) }}</button>
       </div>
+      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür">Sıfırla</button>
       <span class="sim-error" *ngIf="error">{{ error }}</span>
+    </div>
+
+    <div class="modal-backdrop" *ngIf="resetOpen" (click)="cancelReset()">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title" (click)="$event.stopPropagation()">
+        <h2 id="reset-title">Simülasyonu sıfırlamak istediğinize emin misiniz?</h2>
+        <p>
+          Tüm ihaleler, teklifler, teslimatlar ve stok geçmişi silinecek. Ürün, NPC ve nakliyeci ayarları
+          başlangıç değerlerine dönecek; simülasyon saati 0'a alınacak ve simülasyon duracak.
+          <strong>Bu işlem geri alınamaz.</strong>
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="button ghost" [disabled]="resetting" (click)="cancelReset()">Vazgeç</button>
+          <button type="button" class="button danger" [disabled]="resetting" (click)="confirmReset()">
+            {{ resetting ? 'Sıfırlanıyor…' : 'Evet, sıfırla' }}
+          </button>
+        </div>
+        <p class="modal-error" *ngIf="resetError">{{ resetError }}</p>
+      </div>
     </div>
   `,
   styles: [
@@ -42,8 +62,21 @@ import { numberTr } from './display';
     '.segmented button:last-child { border-right:0; }',
     '.segmented button:hover:not(:disabled) { background:#374151; color:#fff; }',
     '.segmented button.active { background:#1d4ed8; color:#fff; }',
-    '.segmented button:disabled { opacity:.55; cursor:progress; }',
+    '.reset-button { border:1px solid #7f1d1d; background:#1f2937; color:#fca5a5; font-size:.82rem; font-weight:750; padding:.4rem .65rem; border-radius:.55rem; cursor:pointer; }',
+    '.reset-button:hover:not(:disabled) { background:#7f1d1d; color:#fff; }',
+    '.reset-button:disabled, .segmented button:disabled { opacity:.55; cursor:progress; }',
     '.sim-error { color:#fca5a5; font-size:.75rem; }',
+    '.modal-backdrop { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:1.5rem; background:rgba(15,23,42,.6); backdrop-filter:blur(2px); }',
+    '.modal { width:min(520px,100%); background:#fff; color:#172033; border-radius:1rem; padding:1.5rem; box-shadow:0 24px 60px rgba(15,23,42,.35); }',
+    '.modal h2 { margin:0 0 .6rem; font-size:1.25rem; color:#111827; }',
+    '.modal p { margin:0 0 1.1rem; color:#374151; line-height:1.5; }',
+    '.modal-actions { display:flex; justify-content:flex-end; gap:.6rem; }',
+    '.button { border:0; border-radius:.6rem; padding:.65rem 1rem; font-weight:750; cursor:pointer; }',
+    '.button.ghost { background:#e2e8f0; color:#1e293b; }',
+    '.button.danger { background:#b91c1c; color:#fff; }',
+    '.button:disabled { opacity:.6; cursor:not-allowed; }',
+    '.modal-error { margin:.9rem 0 0; color:#991b1b; font-weight:700; }',
+    '@media(max-width:760px){.modal-actions{flex-direction:column-reverse}.modal-actions .button{width:100%}}',
   ],
 })
 export class SimulationControlsComponent {
@@ -55,6 +88,9 @@ export class SimulationControlsComponent {
   displayElapsed = 0;
   pending = false;
   error = '';
+  resetOpen = false;
+  resetting = false;
+  resetError = '';
   private anchorSeconds = 0;
   private anchorTime = performance.now();
 
@@ -68,6 +104,13 @@ export class SimulationControlsComponent {
     timer(0, 250)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.tickClock());
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    if (this.resetOpen && !this.resetting) {
+      this.cancelReset();
+    }
   }
 
   get stopped(): boolean {
@@ -105,6 +148,36 @@ export class SimulationControlsComponent {
       .subscribe({
         next: (state) => this.apply(state),
         error: () => (this.error = 'Hız değiştirilemedi'),
+      });
+  }
+
+  askReset(): void {
+    this.resetError = '';
+    this.resetOpen = true;
+  }
+
+  cancelReset(): void {
+    if (this.resetting) return;
+    this.resetOpen = false;
+    this.resetError = '';
+  }
+
+  confirmReset(): void {
+    if (this.resetting) return;
+    this.resetting = true;
+    this.resetError = '';
+    this.api
+      .resetSimulation()
+      .pipe(finalize(() => (this.resetting = false)))
+      .subscribe({
+        next: () => {
+          this.resetOpen = false;
+          // Tüm ekranlar temiz veriyle yeniden yüklensin.
+          window.location.assign('/');
+        },
+        error: (error: unknown) => {
+          this.resetError = apiErrorMessage(error, 'Sıfırlama başarısız oldu.');
+        },
       });
   }
 

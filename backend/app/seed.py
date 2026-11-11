@@ -162,5 +162,133 @@ def main() -> None:
                 )
 
 
+def restore_defaults(db) -> None:
+    """Ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür.
+
+    Simülasyon sıfırlama ucunda kullanılır. Mevcut satırları günceller, eksik
+    olanları ekler; commit çağırana aittir.
+    """
+    products_by_code: dict[str, Product] = {}
+    for (
+        code,
+        name,
+        stock,
+        consumption,
+        critical,
+        target,
+        window,
+        capacity,
+        avg_cost,
+    ) in PRODUCTS:
+        product = db.scalar(select(Product).where(Product.code == code))
+        if product is None:
+            for legacy_code in LEGACY_PRODUCT_CODES.get(code, ()):
+                product = db.scalar(select(Product).where(Product.code == legacy_code))
+                if product is not None:
+                    break
+        if product is None:
+            product = Product(
+                code=code,
+                name=name,
+                current_stock_kg=stock,
+                consumption_kg_per_min=consumption,
+                critical_coverage_minutes=critical,
+                target_coverage_minutes=target,
+                offer_window_seconds=window,
+                capacity_kg=capacity,
+                avg_cost_per_kg=avg_cost,
+                last_purchase_unit_price=avg_cost,
+                next_eligible_at_seconds=Decimal("0"),
+            )
+            db.add(product)
+            db.flush()
+        product.name = name
+        product.current_stock_kg = stock
+        product.consumption_kg_per_min = consumption
+        product.critical_coverage_minutes = critical
+        product.target_coverage_minutes = target
+        product.offer_window_seconds = window
+        product.capacity_kg = capacity
+        product.avg_cost_per_kg = avg_cost
+        product.last_purchase_unit_price = avg_cost
+        product.next_eligible_at_seconds = Decimal("0")
+        products_by_code[code] = product
+
+    suppliers_by_code: dict[str, NpcSupplier] = {}
+    for code, name, *_rest in NPCS:
+        supplier = db.scalar(select(NpcSupplier).where(NpcSupplier.code == code))
+        if supplier is None:
+            supplier = NpcSupplier(code=code, name=name)
+            db.add(supplier)
+            db.flush()
+        else:
+            supplier.name = name
+        suppliers_by_code[code] = supplier
+
+    for product_code, product in products_by_code.items():
+        for (
+            npc_code,
+            _npc_name,
+            probability,
+            price_factor,
+            min_delivery,
+            max_delivery,
+            freight_included,
+            min_available,
+            max_available,
+        ) in NPCS:
+            supplier = suppliers_by_code[npc_code]
+            rule = db.scalar(
+                select(NpcRule).where(
+                    NpcRule.product_id == product.id,
+                    NpcRule.npc_supplier_id == supplier.id,
+                )
+            )
+            min_price, max_price = _price_range(product_code, price_factor)
+            if rule is None:
+                rule = NpcRule(
+                    product_id=product.id,
+                    npc_supplier_id=supplier.id,
+                    is_invited=True,
+                    response_probability=probability,
+                    min_price=min_price,
+                    max_price=max_price,
+                    min_delivery_minutes=min_delivery,
+                    max_delivery_minutes=max_delivery,
+                    freight_included=freight_included,
+                    min_available_kg=min_available,
+                    max_available_kg=max_available,
+                )
+                db.add(rule)
+                continue
+            rule.is_invited = True
+            rule.response_probability = probability
+            rule.min_price = min_price
+            rule.max_price = max_price
+            rule.min_delivery_minutes = min_delivery
+            rule.max_delivery_minutes = max_delivery
+            rule.freight_included = freight_included
+            rule.min_available_kg = min_available
+            rule.max_available_kg = max_available
+
+    for code, name, price_per_ton, transit_minutes in CARRIERS:
+        carrier = db.scalar(select(Carrier).where(Carrier.code == code))
+        if carrier is None:
+            db.add(
+                Carrier(
+                    code=code,
+                    name=name,
+                    price_per_ton=price_per_ton,
+                    transit_minutes=transit_minutes,
+                    is_active=True,
+                )
+            )
+            continue
+        carrier.name = name
+        carrier.price_per_ton = price_per_ton
+        carrier.transit_minutes = transit_minutes
+        carrier.is_active = True
+
+
 if __name__ == "__main__":
     main()

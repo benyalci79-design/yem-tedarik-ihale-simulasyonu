@@ -41,3 +41,8 @@ def pause_simulation() -> dict:
 @router.post("/speed")
 def set_simulation_speed(payload: SpeedRequest) -> dict:
     return serialize_state(engine.set_speed(Decimal(payload.speed)))
+
+
+@router.post("/reset")
+def reset_simulation() -> dict:
+    return serialize_state(engine.reset())

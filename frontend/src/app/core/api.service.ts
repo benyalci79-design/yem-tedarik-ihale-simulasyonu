@@ -40,6 +40,10 @@ export class ApiService {
     return this.http.post<SimulationState>(this.base + '/simulation/speed', { speed });
   }
 
+  resetSimulation(): Observable<SimulationState> {
+    return this.http.post<SimulationState>(this.base + '/simulation/reset', {});
+  }
+
   products(): Observable<{ items: Product[] }> {
     return this.http.get<{ items: Product[] }>(this.base + '/products');
   }
