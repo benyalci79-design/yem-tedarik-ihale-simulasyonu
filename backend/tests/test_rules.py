@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.calendar import format_duration, format_short, split_duration
 from app.routers.metrics import _last_known_avg
 from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
@@ -173,6 +174,25 @@ def test_season_phase_spreads_products():
     assert season_phase(1) == pytest.approx(2 * math.pi / 3)
     assert season_phase(2) == pytest.approx(4 * math.pi / 3)
     assert season_phase(3) == pytest.approx(0.0)
+
+
+def test_calendar_splits_duration():
+    parts = split_duration(Decimal("10800"))
+    assert parts["years"] == 1
+    assert parts["months"] == 0
+    assert parts["days"] == 0
+
+    parts = split_duration(Decimal("1750"))
+    assert parts["years"] == 0
+    assert parts["months"] == 1
+    assert parts["days"] == 28
+    assert format_short(Decimal("1750")) == "1 ay 28 gün 08:00"
+
+
+def test_calendar_formats_short_and_full():
+    assert format_duration(Decimal("0")) == "0 gün 00:00:00"
+    assert format_duration(Decimal("45")) == "1 gün 12:00:00"
+    assert format_short(Decimal("45")) == "1 gün 12:00"
 
 
 def test_award_delivery_is_idempotent():

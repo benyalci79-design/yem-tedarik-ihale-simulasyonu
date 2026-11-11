@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter
 
+from app.calendar import format_duration, format_short
 from app.db import SessionLocal
 from app.models import SimulationState
 from app.runtime import engine
@@ -13,9 +14,12 @@ router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
 
 def serialize_state(state) -> dict:
     progress = Decimal(state.season_progress) if state.season_progress is not None else Decimal("0")
+    elapsed = Decimal(state.elapsed_seconds)
     return {
         "is_running": bool(state.is_running),
         "elapsed_seconds": str(state.elapsed_seconds),
+        "elapsed_display": format_duration(elapsed),
+        "elapsed_short": format_short(elapsed),
         "speed": str(state.speed_multiplier),
         "season_progress": str(progress),
         "season_label": season_label(progress),

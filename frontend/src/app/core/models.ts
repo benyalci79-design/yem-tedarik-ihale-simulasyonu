@@ -1,6 +1,8 @@
 export interface SimulationState {
   is_running: boolean;
   elapsed_seconds: string;
+  elapsed_display: string;
+  elapsed_short: string;
   speed: string;
   season_progress: string;
   season_label: string;

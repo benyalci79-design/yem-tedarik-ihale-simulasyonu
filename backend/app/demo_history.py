@@ -14,7 +14,7 @@ from app.models import (
     TenderParticipation,
 )
 
-DEMO_BASELINE_SECONDS = Decimal("1800")
+DEMO_BASELINE_SECONDS = Decimal("1750")
 ZERO = Decimal("0")
 SIX_PLACES = Decimal("0.000001")
 FOUR_PLACES = Decimal("0.0001")

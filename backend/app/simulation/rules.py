@@ -6,7 +6,7 @@ THOUSANDTH_TON = Decimal("0.001")
 SIX_PLACES = Decimal("0.000001")
 TWO_PLACES = Decimal("0.01")
 MILLISECOND = Decimal("0.001")
-SEASON_PERIOD_SECONDS = Decimal("3600")
+SEASON_PERIOD_SECONDS = Decimal("10800")
 
 
 def consumed_kg(consumption_kg_per_min: Decimal, elapsed_seconds: Decimal) -> Decimal:

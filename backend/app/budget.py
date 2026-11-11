@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Budget, SimulationState, TenderAward
 from app.simulation.rules import TON_KG
 
-BUDGET_PERIOD_SECONDS = Decimal("3600")
+BUDGET_PERIOD_SECONDS = Decimal("900")
 DEFAULT_LIMIT_TL = Decimal("500000.00")
 ZERO = Decimal("0")
 TWO_PLACES = Decimal("0.01")

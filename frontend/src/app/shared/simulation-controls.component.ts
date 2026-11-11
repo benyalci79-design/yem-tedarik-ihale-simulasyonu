@@ -12,8 +12,8 @@ import { numberTr } from './display';
   imports: [CommonModule],
   template: `
     <div class="sim-controls">
-      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.is_running ? 'Simülasyon saati' : 'Simülasyon durdu'">
-        <i></i>{{ numberTr(displayElapsed, 1) }} sn
+      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.elapsed_display ?? 'Simülasyon saati'">
+        <i></i>{{ state?.elapsed_short || '—' }}
       </span>
       <div class="segmented" role="group" aria-label="Simülasyon hızı">
         <button type="button" [class.active]="stopped" [disabled]="pending" (click)="stop()">Dur</button>
@@ -80,14 +80,11 @@ export class SimulationControlsComponent {
   readonly speeds = ['0.5', '1', '2', '3'];
   readonly numberTr = numberTr;
   state: SimulationState | null = null;
-  displayElapsed = 0;
   pending = false;
   error = '';
   resetOpen = false;
   resetting = false;
   resetError = '';
-  private anchorSeconds = 0;
-  private anchorTime = performance.now();
 
   constructor() {
     timer(0, 2000)
@@ -96,9 +93,6 @@ export class SimulationControlsComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((state) => this.apply(state));
-    timer(0, 250)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.tickClock());
   }
 
   @HostListener('document:keydown.escape')
@@ -175,25 +169,7 @@ export class SimulationControlsComponent {
       });
   }
 
-  private tickClock(): void {
-    if (!this.state) return;
-    const speed = Number(this.state.speed) || 1;
-    const running = this.state.is_running ? ((performance.now() - this.anchorTime) / 1000) * speed : 0;
-    this.displayElapsed = Math.max(0, this.anchorSeconds + running);
-  }
-
   private apply(state: SimulationState): void {
-    const server = Number(state.elapsed_seconds) || 0;
-    const speed = Number(state.speed) || 1;
-    const local = this.displayElapsed;
     this.state = state;
-    if (!state.is_running) {
-      this.anchorSeconds = server;
-    } else {
-      const drift = local - server;
-      this.anchorSeconds = drift > speed * 2 || drift < -speed * 3 ? server : Math.max(server, local);
-    }
-    this.anchorTime = performance.now();
-    this.displayElapsed = this.anchorSeconds;
   }
 }
