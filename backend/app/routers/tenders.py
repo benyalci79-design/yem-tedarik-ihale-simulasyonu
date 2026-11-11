@@ -24,6 +24,8 @@ from app.simulation.rules import (
 router = APIRouter(prefix="/api/v1/tenders", tags=["tenders"])
 
 THREE_PLACES = Decimal("0.001")
+SIX_PLACES = Decimal("0.000001")
+TON_KG = Decimal("1000")
 ZERO = Decimal("0")
 
 
@@ -425,6 +427,11 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
         else:
             award.status = "AWAITING_CARRIER"
         db.add(award)
+
+        # "Son alım" bilgisi kabul anında güncellenir (mal fiyatı, nakliye hariç).
+        product.last_purchase_unit_price = (
+            Decimal(participation.unit_price) / TON_KG
+        ).quantize(SIX_PLACES)
 
         participation.accepted_quantity_kg = quantity
         participation.decision = "ACCEPTED" if quantity >= offered else "PARTIAL"

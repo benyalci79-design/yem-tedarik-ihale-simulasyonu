@@ -179,6 +179,17 @@ export interface HistoryPoint {
   products: StockMetricItem[];
 }
 
+export interface PurchaseStatsItem {
+  product_id: number;
+  product_code: string;
+  product_name: string;
+  purchase_count: number;
+  last_unit_price: string;
+  min_unit_price: string | null;
+  max_unit_price: string | null;
+  avg_unit_price: string | null;
+}
+
 export interface ChartSeries {
   id: string;
   label: string;

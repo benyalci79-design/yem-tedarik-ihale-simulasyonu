@@ -60,6 +60,11 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
           <button type="button" class="button finalize" [disabled]="finalizing" (click)="finalize()">İhaleyi tamamla</button>
         </div>
         <p class="hint">Bir ihaleyi birden çok NPC'den karşılayabilirsiniz. Bir tekliften yalnızca bir kez miktar alınır; kalanı kısmi kabul olarak işaretlenir.</p>
+        <p class="trend-legend" *ngIf="lastPurchase() > 0">
+          Son alım <b>{{ numberTr(lastPurchase(), 2) }} TL/kg</b> ·
+          <span class="trend up">▲</span> son alımdan ucuz ·
+          <span class="trend down">▼</span> son alımdan pahalı
+        </p>
         <p class="error" *ngIf="finalizeError">{{ finalizeError }}</p>
 
         <div class="offer-table">
@@ -70,7 +75,11 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
             <div class="npc"><strong>{{ offer.npc_name }}</strong><small>{{ offer.offer_status }}</small></div>
             <div class="price" *ngIf="offer.unit_price">
               <strong>{{ numberTr(offer.unit_price, 0) }} TL/ton</strong>
-              <small>{{ numberTr(offer.unit_price_per_kg ?? 0, 2) }} TL/kg</small>
+              <small>
+                {{ numberTr(offer.unit_price_per_kg ?? 0, 2) }} TL/kg
+                <span class="trend up" *ngIf="isCheaper(offer)" title="Son alım fiyatından ucuz">▲</span>
+                <span class="trend down" *ngIf="isPricier(offer)" title="Son alım fiyatından pahalı">▼</span>
+              </small>
             </div>
             <span *ngIf="!offer.unit_price" class="muted">—</span>
             <span>{{ offer.offered_quantity_kg ? (numberTr(offer.offered_quantity_kg, 0) + ' kg') : '—' }}</span>
@@ -146,7 +155,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.offer-row { display:grid; grid-template-columns:1.4fr 1fr 1fr .7fr .7fr .9fr 1.4fr .9fr; gap:.7rem; align-items:center; padding:.7rem .5rem; border-bottom:1px solid #e5e7eb; }',
     '.offer-head,.award-head { color:#374151; font-size:.8rem; font-weight:800; background:#f1f5f9; border-radius:.4rem; }',
     '.offer-row small,.award-row small { display:block; color:#64748b; margin-top:.15rem; }',
-    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }',
+    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }.trend { font-size:.9em; font-weight:900; }.trend.up { color:#047857; }.trend.down { color:#b91c1c; }',
+    '.trend-legend { margin:.1rem 0 .7rem; color:#475569; font-size:.82rem; }.trend-legend b { color:#111827; }',
     '.freight { font-weight:750; color:#047857; }.freight.excluded { color:#b45309; }',
     '.decision { font-weight:750; }.decision.accepted { color:#047857; }.decision.partial { color:#b45309; }.decision.rejected { color:#991b1b; }.decision.pending { color:#475569; }',
     '.accept-box { display:grid; gap:.2rem; }.accept-box input { width:100%; border:1px solid #64748b; border-radius:.45rem; padding:.45rem; }.accept-box small { color:#64748b; font-size:.72rem; }',
@@ -193,6 +203,20 @@ export class TenderDetailComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((tender) => this.apply(tender));
+  }
+
+  lastPurchase(): number {
+    return Number(this.tender?.product_last_purchase_unit_price ?? 0);
+  }
+
+  isCheaper(offer: TenderOffer): boolean {
+    const price = Number(offer.unit_price_per_kg ?? 0);
+    return this.lastPurchase() > 0 && price > 0 && price < this.lastPurchase();
+  }
+
+  isPricier(offer: TenderOffer): boolean {
+    const price = Number(offer.unit_price_per_kg ?? 0);
+    return this.lastPurchase() > 0 && price > this.lastPurchase();
   }
 
   incomingKg(tender: TenderDetail): number {

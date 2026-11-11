@@ -6,6 +6,7 @@ import {
   HistoryPoint,
   NpcRule,
   Product,
+  PurchaseStatsItem,
   Shipment,
   SimulationState,
   StockMetrics,
@@ -115,5 +116,9 @@ export class ApiService {
     return this.http.get<{ items: HistoryPoint[] }>(this.base + '/stock-metrics/history', {
       params: new HttpParams().set('limit', limit),
     });
+  }
+
+  purchaseStats(): Observable<{ items: PurchaseStatsItem[] }> {
+    return this.http.get<{ items: PurchaseStatsItem[] }>(this.base + '/purchase-stats');
   }
 }

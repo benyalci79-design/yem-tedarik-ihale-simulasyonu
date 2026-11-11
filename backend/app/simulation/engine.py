@@ -313,10 +313,11 @@ class SimulationEngine:
             landed_cost,
         )
         if quantity > ZERO:
-            # "En son kaçtan aldık" bilgisi; stok tükense de korunur.
-            product.last_purchase_unit_price = (landed_cost / quantity).quantize(
-                SIX_PLACES, rounding=ROUND_HALF_UP
-            )
+            # "En son kaçtan aldık" bilgisi mal fiyatıdır (TL/kg, nakliye hariç);
+            # stok tükense de korunur.
+            product.last_purchase_unit_price = (
+                Decimal(award.unit_price_per_ton) / Decimal("1000")
+            ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
         award.delivered_at_seconds = event_time
         award.status = "DELIVERED"
         self._complete_tender_if_delivered(db, tender, event_time)

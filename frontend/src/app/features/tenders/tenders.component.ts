@@ -5,7 +5,7 @@ import { Router, RouterLink } from '@angular/router';
 import { catchError, EMPTY, finalize, forkJoin, merge, Subject, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
-import { Product, TenderSummary } from '../../core/models';
+import { Product, PurchaseStatsItem, TenderSummary } from '../../core/models';
 import { numberTr } from '../../shared/display';
 import { StatusBadgeComponent } from '../../shared/status-badge.component';
 
@@ -15,6 +15,20 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
   imports: [CommonModule, ReactiveFormsModule, RouterLink, StatusBadgeComponent],
   template: `
     <section class="page-heading"><div><p class="eyebrow">SÜREÇ İZLEME</p><h1>İhale listesi</h1><p class="lede">İhaleyi siz açarsınız, NPC tekliflerini siz kabul edersiniz.</p></div></section>
+
+    <section class="purchase-bar" aria-label="Ürün alım fiyatları">
+      <div class="bar-title">Alım fiyatları <small>TL/kg · nakliye hariç</small></div>
+      <div class="bar-grid">
+        <div class="bar-row bar-head"><span>Ürün</span><span>Son alım</span><span>En ucuz</span><span>En pahalı</span><span>Ortalama</span></div>
+        <div class="bar-row" *ngFor="let item of stats">
+          <span class="bar-name">{{ item.product_name }}<small *ngIf="item.purchase_count">{{ item.purchase_count }} alım</small></span>
+          <span>{{ numberTr(item.last_unit_price, 2) }}</span>
+          <span class="good">{{ item.min_unit_price ? numberTr(item.min_unit_price, 2) : '—' }}</span>
+          <span class="bad">{{ item.max_unit_price ? numberTr(item.max_unit_price, 2) : '—' }}</span>
+          <span>{{ item.avg_unit_price ? numberTr(item.avg_unit_price, 2) : '—' }}</span>
+        </div>
+      </div>
+    </section>
 
     <section class="new-tender">
       <div class="section-heading"><div><h2>Yeni ihale aç</h2><p>Miktar, ürünün boş depo kapasitesini aşamaz; aynı üründe tek aktif ihale olabilir.</p></div></div>
@@ -53,6 +67,12 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
   `,
   styles: [
     '.page-heading { margin-bottom:2rem; }.eyebrow { color:#1d4ed8; font-size:.78rem; font-weight:800; letter-spacing:.08em; }.page-heading h1 { margin:.3rem 0; color:#111827; font-size:2.4rem; }.lede { color:#4b5563; }',
+    '.purchase-bar { display:grid; gap:.3rem; padding:.7rem .9rem; margin-bottom:1.1rem; background:#fff; border:1px solid #cbd5e1; border-radius:.85rem; }',
+    '.bar-title { font-weight:800; color:#111827; font-size:.9rem; }.bar-title small { color:#64748b; font-weight:600; margin-left:.4rem; }',
+    '.bar-grid { display:grid; gap:.1rem; }.bar-row { display:grid; grid-template-columns:1.6fr repeat(4,1fr); gap:.6rem; align-items:center; padding:.28rem .35rem; border-radius:.35rem; font-size:.84rem; color:#1f2937; font-variant-numeric:tabular-nums; }',
+    '.bar-row:nth-child(even) { background:#f8fafc; }.bar-head { color:#475569; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.04em; }',
+    '.bar-name { font-weight:750; display:flex; align-items:baseline; gap:.4rem; }.bar-name small { color:#64748b; font-weight:600; font-size:.72rem; }',
+    '.good { color:#047857; font-weight:700; }.bad { color:#b91c1c; font-weight:700; }',
     '.new-tender { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; padding:1.1rem 1.25rem; margin-bottom:1.25rem; }',
     '.new-tender .section-heading { display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; margin-bottom:.9rem; }',
     '.new-tender h2 { margin:0; color:#111827; }.new-tender p { margin:.3rem 0 0; color:#4b5563; }',
@@ -79,6 +99,7 @@ export class TendersComponent {
   private readonly destroyRef = inject(DestroyRef);
   products: Product[] = [];
   tenders: TenderSummary[] = [];
+  stats: PurchaseStatsItem[] = [];
   loading = true;
   error = '';
   createError = '';
@@ -99,6 +120,7 @@ export class TendersComponent {
           return forkJoin({
             products: this.api.products(),
             tenders: this.api.tenders(value.productId ?? undefined, value.status || undefined),
+            stats: this.api.purchaseStats(),
           }).pipe(
             catchError(() => {
               this.error = 'İhaleler yüklenemedi.';
@@ -112,6 +134,7 @@ export class TendersComponent {
       .subscribe((result) => {
         this.products = result.products.items;
         this.tenders = result.tenders.items;
+        this.stats = result.stats.items;
         this.loading = false;
         this.hasLoaded = true;
         this.error = '';
