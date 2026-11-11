@@ -4,6 +4,7 @@ Revision ID: 0001_initial_schema
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects.mysql import BIGINT
 
 revision = "0001_initial_schema"
 down_revision = None
@@ -12,7 +13,7 @@ depends_on = None
 
 
 def _bigint() -> sa.types.TypeEngine:
-    return sa.BigInteger().with_variant(sa.BIGINT(unsigned=True), "mysql")
+    return sa.BigInteger().with_variant(BIGINT(unsigned=True), "mysql")
 
 
 def upgrade() -> None:
