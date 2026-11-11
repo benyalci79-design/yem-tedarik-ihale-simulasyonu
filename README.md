@@ -31,6 +31,27 @@ Bu komut `frontend/proxy.conf.json` üzerinden `/api` isteklerini `http://localh
 
 Hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenmez.
 
+## İzole geliştirme ortamı
+
+Ana demo ortamına (8080) dokunmadan ikinci bir stack çalıştırmak için:
+
+```powershell
+Copy-Item .env.dev.example .env.dev
+docker compose -p yem-dev --env-file .env.dev up -d --build
+```
+
+- Arayüz: http://localhost:18080
+- API: http://localhost:18000
+- Veritabanı: `yem_simulation_dev`, kendi volume'u: `yem-dev_db_data`
+
+Proje adı (`-p yem-dev`) sayesinde container'lar, ağ ve volume'lar ana ortamdan ayrıdır; ana demo http://localhost:8080 üzerinde çalışmaya devam eder. Kapatmak için:
+
+```powershell
+docker compose -p yem-dev down -v
+```
+
+`-v` dev veritabanını da siler. Ana ortamı yeniden derlerken `Developer` dalında olun; aksi hâlde ana stack, üzerinde çalışılan dalın kodunu derler.
+
 ## Katmanlar
 
 - `backend/`: Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2 senkron, PyMySQL, Alembic.
