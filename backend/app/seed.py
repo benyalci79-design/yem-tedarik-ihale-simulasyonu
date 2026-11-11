@@ -9,9 +9,9 @@ from app.models import Carrier, NpcRule, NpcSupplier, Product, SimulationState
 TWO_PLACES = Decimal("0.01")
 
 PRODUCTS = (
-    ("MISR", "Dane Mısır", Decimal("900"), Decimal("100"), Decimal("10"), Decimal("30"), 60, Decimal("5000.000"), Decimal("8.750000")),
-    ("ARPA", "Arpa", Decimal("700"), Decimal("80"), Decimal("10"), Decimal("30"), 60, Decimal("4000.000"), Decimal("7.750000")),
-    ("SOYA", "Soya Küspesi", Decimal("3000"), Decimal("60"), Decimal("10"), Decimal("30"), 60, Decimal("6000.000"), Decimal("13.000000")),
+    ("MISR", "Dane Mısır", Decimal("900"), Decimal("100"), Decimal("10"), Decimal("30"), 60, Decimal("5000.000"), Decimal("8.750000"), Decimal("1.00"), Decimal("8.00")),
+    ("ARPA", "Arpa", Decimal("700"), Decimal("80"), Decimal("10"), Decimal("30"), 60, Decimal("4000.000"), Decimal("7.750000"), Decimal("0.50"), Decimal("6.00")),
+    ("SOYA", "Soya Küspesi", Decimal("3000"), Decimal("60"), Decimal("10"), Decimal("30"), 60, Decimal("6000.000"), Decimal("13.000000"), Decimal("1.50"), Decimal("10.00")),
 )
 
 NPCS = (
@@ -73,6 +73,8 @@ def main() -> None:
             window,
             capacity,
             avg_cost,
+            loss_percent,
+            season_amplitude,
         ) in PRODUCTS:
             product = db.scalar(select(Product).where(Product.code == code))
             if product is None:
@@ -92,6 +94,8 @@ def main() -> None:
                     capacity_kg=capacity,
                     avg_cost_per_kg=avg_cost,
                     last_purchase_unit_price=avg_cost,
+                    loss_percent=loss_percent,
+                    season_amplitude=season_amplitude,
                     next_eligible_at_seconds=Decimal("0"),
                 )
                 db.add(product)
@@ -180,6 +184,8 @@ def restore_defaults(db) -> None:
         window,
         capacity,
         avg_cost,
+        loss_percent,
+        season_amplitude,
     ) in PRODUCTS:
         product = db.scalar(select(Product).where(Product.code == code))
         if product is None:
@@ -199,6 +205,8 @@ def restore_defaults(db) -> None:
                 capacity_kg=capacity,
                 avg_cost_per_kg=avg_cost,
                 last_purchase_unit_price=avg_cost,
+                loss_percent=loss_percent,
+                season_amplitude=season_amplitude,
                 next_eligible_at_seconds=Decimal("0"),
             )
             db.add(product)
@@ -212,6 +220,8 @@ def restore_defaults(db) -> None:
         product.capacity_kg = capacity
         product.avg_cost_per_kg = avg_cost
         product.last_purchase_unit_price = avg_cost
+        product.loss_percent = loss_percent
+        product.season_amplitude = season_amplitude
         product.next_eligible_at_seconds = Decimal("0")
         products_by_code[code] = product
 

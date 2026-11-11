@@ -5,7 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Product, StockSnapshot
+from app.models import Product, StockSnapshot, TenderAward
+from app.simulation.rules import price_per_ton_to_per_kg
 
 router = APIRouter(prefix="/api/v1/stock-metrics", tags=["stock-metrics"])
 
@@ -53,6 +54,15 @@ def stock_metrics(db: Session = Depends(get_db)) -> dict:
                 "value_tl": str(value),
             }
         )
+    awards = db.scalars(select(TenderAward)).all()
+    total_loss_kg = sum((Decimal(award.loss_kg) for award in awards), ZERO)
+    total_loss_tl = sum(
+        (
+            Decimal(award.loss_kg) * price_per_ton_to_per_kg(Decimal(award.unit_price_per_ton))
+            for award in awards
+        ),
+        ZERO,
+    )
     return {
         "items": items,
         "total_stock_kg": str(total_stock),
@@ -62,6 +72,8 @@ def stock_metrics(db: Session = Depends(get_db)) -> dict:
             if total_stock > ZERO
             else _last_known_avg([Decimal(product.avg_cost_per_kg) for product in products])
         ),
+        "total_loss_kg": str(total_loss_kg),
+        "total_loss_tl": str(total_loss_tl.quantize(TWO_PLACES)),
     }
 
 

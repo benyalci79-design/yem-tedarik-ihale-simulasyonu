@@ -28,6 +28,8 @@ class ProductPatch(BaseModel):
     offer_window_seconds: int | None = Field(default=None, ge=10, le=600)
     capacity_kg: Decimal | None = Field(default=None, gt=0, max_digits=16, decimal_places=3)
     avg_cost_per_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=6)
+    loss_percent: Decimal | None = Field(default=None, ge=0, le=10, max_digits=5, decimal_places=2)
+    season_amplitude: Decimal | None = Field(default=None, ge=0, le=50, max_digits=5, decimal_places=2)
 
     @model_validator(mode="before")
     @classmethod
@@ -48,6 +50,11 @@ class ProductPatch(BaseModel):
     @classmethod
     def validate_six_places(cls, value: Decimal | None) -> Decimal | None:
         return None if value is None else _max_places(value, 6)
+
+    @field_validator("loss_percent", "season_amplitude")
+    @classmethod
+    def validate_two_places_percent(cls, value: Decimal | None) -> Decimal | None:
+        return None if value is None else _max_places(value, 2)
 
     @model_validator(mode="after")
     def validate_target_if_both_present(self):

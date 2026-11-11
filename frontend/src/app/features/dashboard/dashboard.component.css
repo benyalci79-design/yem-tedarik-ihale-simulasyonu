@@ -28,3 +28,5 @@
 @media(max-width:640px){.cost-grid{grid-template-columns:1fr}}
 .last-buy { color:#64748b; font-size:.76rem; }
 .cost-card.total .last-buy { color:#cbd5e1; }
+.season-chip { color:#475569; font-size:.8rem; }
+

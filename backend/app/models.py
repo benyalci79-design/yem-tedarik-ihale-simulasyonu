@@ -24,6 +24,8 @@ class Product(Base):
     last_purchase_unit_price: Mapped[Decimal] = mapped_column(
         DECIMAL(14, 6), nullable=False, server_default="0"
     )
+    loss_percent: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, server_default="0")
+    season_amplitude: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, server_default="0")
     next_eligible_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, default=0)
 
     npc_rules: Mapped[list["NpcRule"]] = relationship(back_populates="product", passive_deletes=True)
@@ -140,6 +142,7 @@ class TenderParticipation(Base):
     freight_included: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
     min_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="1000")
     max_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="3000")
+    season_factor: Mapped[Decimal] = mapped_column(DECIMAL(6, 4), nullable=False, server_default="1.0000")
     will_respond: Mapped[bool] = mapped_column(BOOLEAN, nullable=False)
     response_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     has_offer: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
@@ -198,6 +201,7 @@ class TenderAward(Base):
     carrier_assigned_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivery_due_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivered_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
+    loss_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="0")
     landed_cost_tl: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 2), nullable=True)
 
     tender: Mapped[Tender] = relationship(back_populates="awards", foreign_keys=[tender_id])

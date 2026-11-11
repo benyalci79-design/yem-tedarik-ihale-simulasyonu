@@ -18,7 +18,14 @@ from app.models import (
 )
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
 from app.seed import restore_defaults
-from app.simulation.rules import can_deliver_award, consume_stock, weighted_average_cost
+from app.simulation.rules import (
+    apply_loss,
+    can_deliver_award,
+    consume_stock,
+    season_factor,
+    season_phase,
+    weighted_average_cost,
+)
 from app.simulation.timeline import TimelineEvent, ordered_events
 
 ACTIVE_STATUSES = ("OPEN", "EVALUATION", "AWARDED")
@@ -271,15 +278,22 @@ class SimulationEngine:
             or Decimal(participation.response_at_seconds) >= Decimal(tender.offer_closes_at_seconds)
         ):
             return
+        product = tender.product
+        season = season_factor(
+            event_time,
+            Decimal(product.season_amplitude),
+            season_phase(product.id),
+        )
         offer = generate_offer(
-            Decimal(participation.min_price),
-            Decimal(participation.max_price),
+            (Decimal(participation.min_price) * season).quantize(Decimal("0.01")),
+            (Decimal(participation.max_price) * season).quantize(Decimal("0.01")),
             participation.min_delivery_minutes,
             participation.max_delivery_minutes,
             Decimal(participation.min_available_kg),
             Decimal(participation.max_available_kg),
             self.rng,
         )
+        participation.season_factor = season
         participation.has_offer = True
         participation.unit_price = offer.unit_price
         participation.delivery_minutes = offer.delivery_minutes
@@ -300,14 +314,16 @@ class SimulationEngine:
 
         stock_before = Decimal(product.current_stock_kg)
         quantity = Decimal(award.quantity_kg)
+        accepted = apply_loss(quantity, Decimal(product.loss_percent))
         landed_cost = Decimal(award.landed_cost_tl or ZERO)
-        product.current_stock_kg = stock_before + quantity
+        product.current_stock_kg = stock_before + accepted
         product.avg_cost_per_kg = weighted_average_cost(
             stock_before,
             Decimal(product.avg_cost_per_kg),
-            quantity,
+            accepted,
             landed_cost,
         )
+        award.loss_kg = quantity - accepted
         if quantity > ZERO:
             product.last_purchase_unit_price = (
                 Decimal(award.unit_price_per_ton) / Decimal("1000")

@@ -5,6 +5,7 @@ import pytest
 from app.routers.metrics import _last_known_avg
 from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
+    apply_loss,
     can_deliver_award,
     check_capacity,
     consume_stock,
@@ -16,6 +17,8 @@ from app.simulation.rules import (
     price_per_ton_to_per_kg,
     remaining_need_kg,
     round_up_ton,
+    season_factor,
+    season_phase,
     tender_quantity_ton,
     weighted_average_cost,
 )
@@ -141,6 +144,27 @@ def test_delivery_due_with_carrier_waits_for_assignment():
 def test_total_unit_price_is_preserved_when_stock_is_zero():
     assert _last_known_avg([Decimal("8"), Decimal("10")]) == Decimal("9.000000")
     assert _last_known_avg([]) == Decimal("0")
+
+
+def test_apply_loss_reduces_accepted_quantity():
+    assert apply_loss(Decimal("1000"), Decimal("1.50")) == Decimal("985.000000")
+    assert apply_loss(Decimal("1000"), Decimal("0")) == Decimal("1000")
+    assert apply_loss(Decimal("1200.500"), Decimal("0.50")) == Decimal("1194.497500")
+
+
+def test_season_factor_follows_period():
+    assert season_factor(Decimal("0"), Decimal("10"), 0.0) == Decimal("1.000000")
+    assert season_factor(Decimal("900"), Decimal("10"), 0.0) == Decimal("1.100000")
+    assert season_factor(Decimal("2700"), Decimal("10"), 0.0) == Decimal("0.900000")
+    assert season_factor(Decimal("900"), Decimal("0"), 0.0) == Decimal("1")
+
+
+def test_season_phase_spreads_products():
+    import math
+
+    assert season_phase(1) == pytest.approx(2 * math.pi / 3)
+    assert season_phase(2) == pytest.approx(4 * math.pi / 3)
+    assert season_phase(3) == pytest.approx(0.0)
 
 
 def test_award_delivery_is_idempotent():

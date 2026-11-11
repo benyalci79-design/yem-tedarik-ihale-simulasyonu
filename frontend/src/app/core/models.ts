@@ -23,6 +23,9 @@ export interface Product {
   capacity_kg: string;
   avg_cost_per_kg: string;
   last_purchase_unit_price: string;
+  loss_percent: string;
+  season_amplitude: string;
+  season_factor: string;
   incoming_kg: string;
   free_capacity_kg: string;
   stock_value_tl: string;
@@ -60,6 +63,7 @@ export interface TenderOffer {
   accepted_quantity_kg?: string;
   delivery_minutes?: number;
   freight_included?: boolean;
+  season_factor?: string;
   submitted_at_seconds?: string;
   decision?: string;
   decision_reason?: string | null;
@@ -79,6 +83,8 @@ export interface TenderAward {
   carrier_name: string | null;
   carrier_price_per_ton: string | null;
   status: string;
+  loss_kg: string;
+  accepted_kg: string;
   accepted_at_seconds: string;
   carrier_assigned_at_seconds: string | null;
   delivery_due_at_seconds: string | null;
@@ -107,6 +113,8 @@ export interface TenderSummary {
   product_capacity_kg: string;
   product_avg_cost_per_kg: string;
   product_last_purchase_unit_price: string;
+  product_loss_percent: string;
+  product_season_factor: string;
   result_reason: string | null;
   awards: TenderAward[];
 }
@@ -169,6 +177,8 @@ export interface StockMetrics {
   total_stock_kg: string;
   total_value_tl: string;
   total_avg_cost_per_kg: string;
+  total_loss_kg: string;
+  total_loss_tl: string;
 }
 
 export interface HistoryPoint {
@@ -198,3 +208,4 @@ export interface ChartSeries {
   marker: 'circle' | 'square' | 'triangle';
   values: number[];
 }
+

@@ -37,6 +37,10 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
         <span class="buy">Son alım <b>{{ numberTr(item.product_last_purchase_unit_price, 2) }} TL/kg</b></span>
         <span class="sep">·</span>
         <span>Ortalama <b>{{ numberTr(item.product_avg_cost_per_kg, 2) }} TL/kg</b></span>
+        <span class="sep">·</span>
+        <span>Sezon <b>×{{ numberTr(item.product_season_factor, 2) }}</b></span>
+        <span class="sep">·</span>
+        <span>Fire <b>%{{ numberTr(item.product_loss_percent, 2) }}</b></span>
       </section>
 
       <section class="need-grid">
@@ -79,6 +83,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
                 {{ numberTr(offer.unit_price_per_kg ?? 0, 2) }} TL/kg
                 <span class="trend up" *ngIf="isCheaper(offer)" title="Son alım fiyatından ucuz">▲</span>
                 <span class="trend down" *ngIf="isPricier(offer)" title="Son alım fiyatından pahalı">▼</span>
+                <span class="season" *ngIf="offer.season_factor">· sezon ×{{ numberTr(offer.season_factor, 2) }}</span>
               </small>
             </div>
             <span *ngIf="!offer.unit_price" class="muted">—</span>
@@ -112,7 +117,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
           <div class="award-row award-head"><span>NPC</span><span>Miktar</span><span>Fiyat</span><span>Nakliye</span><span>Durum</span><span>Teslim</span><span>Toplam maliyet</span></div>
           <div class="award-row" *ngFor="let award of item.awards">
             <strong>{{ award.npc_name }}</strong>
-            <span>{{ numberTr(award.quantity_kg, 0) }} kg</span>
+            <span>{{ numberTr(award.quantity_kg, 0) }} kg<small *ngIf="Number(award.loss_kg) > 0">fire {{ numberTr(award.loss_kg, 0) }} kg</small></span>
             <span>{{ numberTr(award.unit_price_per_ton, 0) }} TL/ton<small>{{ numberTr(award.unit_price_per_kg, 2) }} TL/kg</small></span>
             <span>
               <ng-container *ngIf="award.freight_included">Dahil</ng-container>
@@ -155,7 +160,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.offer-row { display:grid; grid-template-columns:1.4fr 1fr 1fr .7fr .7fr .9fr 1.4fr .9fr; gap:.7rem; align-items:center; padding:.7rem .5rem; border-bottom:1px solid #e5e7eb; }',
     '.offer-head,.award-head { color:#374151; font-size:.8rem; font-weight:800; background:#f1f5f9; border-radius:.4rem; }',
     '.offer-row small,.award-row small { display:block; color:#64748b; margin-top:.15rem; }',
-    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }.trend { font-size:.9em; font-weight:900; }.trend.up { color:#047857; }.trend.down { color:#b91c1c; }',
+    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }.season { color:#64748b; font-weight:600; }.trend { font-size:.9em; font-weight:900; }.trend.up { color:#047857; }.trend.down { color:#b91c1c; }',
     '.trend-legend { margin:.1rem 0 .7rem; color:#475569; font-size:.82rem; }.trend-legend b { color:#111827; }',
     '.freight { font-weight:750; color:#047857; }.freight.excluded { color:#b45309; }',
     '.decision { font-weight:750; }.decision.accepted { color:#047857; }.decision.partial { color:#b45309; }.decision.rejected { color:#991b1b; }.decision.pending { color:#475569; }',
