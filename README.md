@@ -1,14 +1,12 @@
 # Yem İhale Simülasyonu
 
-Yem tüketimini simüle eden, kritik kapsama ulaşıldığında otomatik ihale açan ve yalnızca backend tarafından yönetilen NPC tedarikçilerden teklif toplayan yönetici uygulamasıdır.
+Yem tüketimini simüle eden, kritik kapsamaya düşen ürünler için **kullanıcının elle ihale açtığı**, NPC tedarikçilerden gelen teklifleri **kısmi miktarlarla kabul ettiği** ve nakliye hariç teklifler için **nakliyeci atadığı** yönetici uygulamasıdır.
 
-Bu repository, ekli **Yem İhale Simülasyonu v4.0** PDF şartnamesini bağlayıcı kaynak kabul eder. İnsan tedarikçi, kullanıcı hesabı, JWT, manuel teklif/kabul, mesaj, bildirim, ödeme, rapor ve dosya aktarımı bulunmaz.
+Simülasyon saati gerçek zamandan bağımsız ölçeklenir (Dur · 0,5x · 1x · 2x · 3x); stok, depo kapasitesi, ağırlıklı ortalama maliyet ve ihale akışı bu saat üzerinde ilerler.
 
 ## Kurulum
 
 Docker Desktop ve Docker Compose v2 yeterlidir.
-
-PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
@@ -22,26 +20,62 @@ Health: http://localhost:8080/api/v1/health
 
 Swagger: http://localhost:8080/api/docs
 
-Angular'ı Docker dışında çalıştırmak isterseniz backend ve veritabanını Compose ile başlatın, ardından ayrı bir PowerShell penceresinde:
+Angular'ı Docker dışında çalıştırmak için backend ve veritabanını Compose ile başlatın, ayrı bir pencerede:
 
 ```powershell
 cd frontend
 npm start
 ```
 
-Bu komut `frontend/proxy.conf.json` üzerinden `/api` isteklerini `http://localhost:8000` adresindeki backend'e yönlendirir. Kullanıcı arayüzü `http://localhost:4200` adresinden açılır.
+Bu komut `frontend/proxy.conf.json` üzerinden `/api` isteklerini `http://localhost:8000` adresindeki backend'e yönlendirir. Arayüz `http://localhost:4200` adresinden açılır.
 
-Kodun çalışması için hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenmez.
+Hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenmez.
 
 ## Katmanlar
 
 - `backend/`: Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2 senkron, PyMySQL, Alembic.
 - `frontend/`: Angular 21 standalone, Reactive Forms, HttpClient, Türkçe yönetici arayüzü.
 - `compose.yaml`: MariaDB 11.4, backend ve Nginx servisleri.
-- `backend/migrations/`: Altı tabloyu oluşturan Alembic migration.
-- `backend/app/simulation/`: saf iş kuralları, NPC üretimi, değerlendirme ve kronolojik tick motoru.
+- `backend/migrations/`: iki migration (ilk şema + manuel ihale/kapasite/nakliye/maliyet).
+- `backend/app/simulation/`: saf iş kuralları, NPC teklif üretimi ve kronolojik tick motoru.
 
-Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden yayın yapar. Backend tek Uvicorn worker ile çalışır.
+Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden yayın yapar (yerelde backend ayrıca 127.0.0.1:8000'de dinler). Backend tek Uvicorn worker ile çalışır.
+
+## Simülasyon davranışı
+
+- **Hız:** `POST /simulation/speed` yalnızca `0.5`, `1`, `2`, `3` değerlerini kabul eder. Tick'te `delta = gerçek_delta * hız` uygulanır. Hız değiştirilirken önce eski hızla geçen süre işlenir, sonra `last_tick_at` sıfırlanır; böylece geçmiş zaman yanlış ölçeklenmez. Hız veritabanında kalıcıdır, yeniden başlatmada simülasyon durur ama hız korunur.
+- **Tüketim:** `max(0, stok - kg/dakika * geçen_saniye / 60)`. Tüketim yalnızca stoğu düşürür, ortalama maliyeti değiştirmez.
+- **Kapsama:** `stok / tüketim`.
+- **İhale açma:** Yalnızca kullanıcı `POST /tenders` ile açar. Otomatik açılış, otomatik değerlendirme ve 30 saniyelik yeniden deneme **yoktur**. Üründe `OPEN`, `EVALUATION` veya `AWARDED` süreç varken ikinci ihale açılamaz.
+- **Depo sınırı:** Ürün başına `capacity_kg`. Kullanılan kapasite = stok + yoldaki (teslim edilmemiş) award miktarı. Sınırı aşan ihale açılışı ve teklif kabulü `422 CAPACITY_EXCEEDED` ile reddedilir.
+- **Teklif gizliliği:** `OPEN` aşamasında teklif fiyatı, miktarı ve nakliye modu API'den hiç gönderilmez (`/offers` ucu 409 `OFFERS_HIDDEN`). Süre dolunca ihale `EVALUATION` olur ve teklifler açılır.
+- **Kabul:** Kullanıcı bir tekliften `quantity_kg` kadar kabul eder. Üst sınır `min(teklif miktarı, kalan ihtiyaç, boş kapasite)`. Bir tekliften yalnızca bir kez miktar alınır; miktar teklifin tamamıysa `ACCEPTED`, azıysa `PARTIAL`. İhale birden fazla NPC'den karşılanabilir.
+- **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
+- **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
+- **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
+
+## Maliyet hesabı
+
+- Teslim maliyeti: `landed_cost_tl = quantity_kg/1000 * (NPC TL/ton + nakliyeci TL/ton)`.
+- Ortalama maliyet: `(stok*ortalama + eklenen_toplam_maliyet) / (stok + eklenen_kg)`, 6 basamak.
+- Stok değeri: `stok * ortalama maliyet`.
+- Her tick sonunda ve her teslimattan hemen sonra tüm ürünler için **aynı `elapsed_seconds`** ile `stock_snapshots` satırı yazılır. Ürün başına yaklaşık 3000 nokta tutulur; daha eskiler seyrek bir DELETE ile silinir. `GET /stock-metrics/history?limit=300` noktaları eşit aralıklı örnekler.
+
+## API özeti
+
+`/api/v1` altında:
+
+- `GET /health`
+- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`
+- `GET /products`, `PATCH /products/{id}` (kapasite ve ortalama maliyet dahil)
+- `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}` (nakliye modu, mevcut miktar aralığı dahil)
+- `GET /tenders?product_id=&status=`, `POST /tenders`
+- `GET /tenders/{id}`, `POST /tenders/{id}/accept`, `POST /tenders/{id}/finalize`
+- `GET /tenders/{id}/offers`
+- `GET /carriers`, `GET /shipments?status=`, `POST /shipments/{award_id}/assign-carrier`
+- `GET /stock-metrics`, `GET /stock-metrics/history?limit=`
+
+Decimal değerler JSON'da dizge olarak döner. Liste yanıtları `{items:[...]}`, hatalar `{error:{code,message}}` biçimindedir.
 
 ## Seed verisi
 
@@ -51,42 +85,12 @@ Entrypoint sırası:
 2. `python -m app.seed`
 3. Tek Uvicorn worker
 
-Seed mevcut kayıtları değiştirmez. Üç temel ürün, üç NPC ve dokuz NPC kuralı eksikse eklenir. Simülasyon başlangıçta duraklatılmıştır.
+Seed **eklemelidir**: mevcut kayıtları ve ayarları değiştirmez, yalnızca eksikleri ekler.
 
-## Simülasyon davranışı
-
-- Stok tüketimi: `max(0, stok - kg/dakika * geçen_saniye / 60)`.
-- Kapsama: `stok / tüketim`.
-- Kapsama kritik değere eşit veya küçük olduğunda hedef kapsama göre 0,001 ton basamağına yukarı yuvarlanmış ihale açılır.
-- Aynı üründe OPEN, EVALUATION veya AWARDED süreç varken ikinci aktif süreç açılamaz.
-- Farklı ürünler bağımsız olarak eşzamanlı ilerler.
-- NPC davet anında cevap planını tek kez oluşturur; gerçekleşen teklifler participation satırına tek kez yazılır.
-- OPEN yanıtlarında fiyat, teslim ve plan alanları public modelden tamamen çıkarılır. `/offers` ucu OPEN için 409 OFFERS_HIDDEN döner.
-- Tick olayları tüketim, teslimat, NPC cevapları, kapanış, değerlendirme ve yeni ihtiyaç sırasıyla kronolojik işlenir.
-- Teslimat yalnız AWARDED -> DELIVERED geçişinde bir kez stok ekler.
-- Backend yeniden başlarsa simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
-
-PDF’deki v4.0 kuralı gereği kapanışa tam eşit NPC cevabı kabul edilmez; planlanan cevap aralığı açılıştan 1 saniye sonrası ile kapanıştan 1 saniye öncesidir.
-
-## API özeti
-
-`/api/v1` altında:
-
-- `GET /health`
-- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`
-- `GET /products`, `PATCH /products/{id}`
-- `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}`
-- `GET /tenders?product_id=&status=`
-- `GET /tenders/{id}`
-- `GET /tenders/{id}/offers`
-
-Decimal değerler JSON'da dizge olarak döner. Liste yanıtları `{items:[...]}`, hatalar `{error:{code,message}}` biçimindedir.
-
-## Frontend notları (ekran güncellenmiyor sorunu)
-
-- Angular 21, `bootstrapApplication` çağrısında **zone.js yüklü olsa bile zoneless change detection** kullanır. Bu uygulama RxJS abonelikleri, `timer` ve HTTP geri dönüşleriyle klasik biçimde yazıldığı için `app.config.ts` içindeki `provideZoneChangeDetection({ eventCoalescing: true })` zorunludur. Bu sağlayıcı kaldırılırsa veri gelir ama ekran güncellenmez; sayfalar "hazırlanıyor" ekranında kalır ve simülasyon saati donar.
-- `src/index.html` içindeki `<base href="/">` sayesinde `/tenders/7` gibi derin bağlantılar ve o sayfada F5 doğrudan çalışır. Etiket kaldırılırsa alt yolda JS paketleri 404 alır ve sayfa boş açılır.
-- Üretim derlemesi içerik hash'li dosya üretir (`main-XXXXXXXX.js`); Nginx `index.html` için `Cache-Control: no-cache` döner, böylece yeni sürüm yayınlandığında tarayıcı eski paketi göstermez.
+- 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet).
+- **10 NPC** (A–J). Cevap olasılıkları 0,00–1,00; teslim süreleri 1–8 dk; 4 NPC nakliye hariç ve bu yüzden %5–10 daha ucuz; teklif miktarları 300–6000 kg arasında değişir, böylece 2–3 tonluk bir ihale genelde tek NPC'den karşılanmaz.
+- Her NPC için her üründe bir kural (30 kural).
+- **4 nakliyeci:** Toplu Yük (150 TL/ton, 12 dk), Ekonomik (180, 8), Standart (450, 5), Ekspres (900, 2).
 
 ## Test
 
@@ -103,45 +107,47 @@ $env:PYTHONPATH = "backend"
 python -m pytest -q
 ```
 
-Frontend için ayrı bir tarayıcı birim test paketi kurulmamıştır; `npm test` üretim derlemesini çalıştıran bir smoke test komutudur:
+Frontend için ayrı bir tarayıcı birim test paketi yoktur; `npm test` üretim derlemesini çalıştıran smoke test komutudur:
 
 ```powershell
 cd frontend
 npm test
 ```
 
-Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, olasılık sınırları, fiyat ve teslim sınırları, uygun teklif seçimi, acil kabul, eşitlik, idempotent teslimat ve aynı zamandaki kronolojik olay sırası.
+Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, olasılık sınırları, fiyat/teslim/miktar üretimi, kapasite sınırı ve yoldaki miktar, kısmi kabul üst sınırı, landed cost, ağırlıklı ortalama maliyet, teslim zamanı (nakliye dahil/hariç), award idempotency, kronolojik olay sırası, şema doğrulaması.
 
 ## Ekranlar
 
-Uygulama yalnızca şu beş route'u içerir:
+- `/`: Özet — simülasyon saati, stok maliyeti kartları, iki çizgi grafik, süreç akışı, ürün doluluk çubukları.
+- `/products`: Ürün Ayarları — stok, tüketim, eşikler, teklif penceresi, **depo kapasitesi**, **ortalama maliyet**, doluluk göstergesi.
+- `/npc-rules`: NPC Kuralları — davet, olasılık, fiyat, teslim, **nakliye dahil/hariç**, **mevcut miktar aralığı**; ürün filtresi.
+- `/tenders`: İhale Listesi — **yeni ihale açma paneli** (önerilen miktar ve boş kapasite ile), filtreler, kabul özeti.
+- `/tenders/:id`: İhale Detayı — gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, "İhaleyi tamamla", teslimat/award listesi.
+- `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
 
-- `/`: Özet
-- `/products`: Ürün Ayarları
-- `/npc-rules`: NPC Kuralları
-- `/tenders`: İhale Listesi
-- `/tenders/:id`: İhale Detayı
+Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**) ve simülasyon saati tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
 
-Teklifler yaklaşık iki saniyede polling ile güncellenir. Ekranlarda yükleniyor, hata, yeniden dene ve boş durumlar bulunur. Açık ihalelerde gizlilik CSS ile değil, API veri modeliyle sağlanır.
+## Frontend notları
+
+- Angular 21, `bootstrapApplication` çağrısında **zone.js yüklü olsa bile zoneless change detection** kullanır. Bu uygulama RxJS abonelikleri, `timer` ve HTTP geri dönüşleriyle klasik biçimde yazıldığı için `app.config.ts` içindeki `provideZoneChangeDetection({ eventCoalescing: true })` zorunludur. Bu sağlayıcı kaldırılırsa veri gelir ama ekran güncellenmez.
+- `src/index.html` içindeki `<base href="/">` sayesinde `/tenders/7` gibi derin bağlantılar ve o sayfada F5 doğrudan çalışır.
+- Üretim derlemesi içerik hash'li dosya üretir (`main-XXXXXXXX.js`); Nginx `index.html` için `Cache-Control: no-cache` döner.
+- Grafikler bağımlılıksız SVG bileşenidir (`shared/line-chart.component.ts`); renk + çizgi deseni + işaretçi şekli birlikte kullanılır.
 
 ## Kabul kontrol listesi
 
-1. **PASS** — Tüketim ve stok tabanı: `simulation/rules.py`, `test_consumption_never_makes_stock_negative`.
-2. **PASS** — Kritik kapsama ve hedef miktar: `tender_quantity_ton`, `test_quantity_is_rounded_up_to_thousandth_ton`.
-3. **PASS** — Eşzamanlı ürün akışı ve ürün başına aktif süreç kontrolü: `engine.py::_open_needed_tenders`.
-4. **PASS** — Davetli NPC, %0/%100 sınırları ve RNG enjeksiyonu: `npc.py`, `test_probability_boundaries`.
-5. **PASS** — Planın ve participation satırının tekrar üretilmemesi: DB'deki `will_respond`, `response_at_seconds` ve UNIQUE kısıtı.
-6. **PASS** — OPEN gizliliği: public serializer plan/fiyat alanlarını üretmiyor; çalışan Compose testinde `/tenders/11/offers` 409 OFFERS_HIDDEN döndü.
-7. **PASS** — Kapanış ve ayrı değerlendirme anı: `close` ve `evaluate` olayları ayrı zamanlanıyor.
-8. **PASS** — Uygun teklif, eşitlik ve acil kabul: `evaluation.py`, ilgili pytest senaryoları.
-9. **PASS** — Tek teslimat: `deliver_stock_once`, idempotency testi ve AWARDED -> DELIVERED guard'ı.
-10. **PASS** — Teklif yoksa NO_AWARD ve 30 saniye yeniden deneme: `engine.py::_evaluate_tender`.
-11. **PASS** — Karar anı stok/kapsama snapshot'ı ve kalıcı gerekçe: Tender değerlendirme alanları.
-12. **PASS** — Uzun tick olay sırası: `timeline.py`, `test_long_tick_event_order_is_chronological_and_prioritized`.
-13. **PASS** — Kilitli ayarlar ve 422 doğrulama: `products.py`, `npc_rules.py`, Pydantic patch şemaları.
-14. **PASS** — Restart duraklatması: `initialize_after_restart` is_running=false ve last_tick_at temizliği.
-15. **PASS** — Kapsam dışı özellikler yok: route listesi beş ekranla sınırlı; auth/tedarikçi/manuel teklif/mesaj yok.
-16. **PASS** — Compose: `docker compose config`, `docker compose build`, `docker compose up -d`, frontend build ve health 200 doğrulandı.
+Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
+
+1. **PASS** — Depo sınırı: `check_capacity` birim testleri; canlı API'de 6 tonluk ihale `422 CAPACITY_EXCEEDED` ("Boş kapasite: 5166.502 kg"), daraltılmış kapasitede 1.000 kg kabul `422 CAPACITY_EXCEEDED` ("Boş kapasite: 500.000 kg").
+2. **PASS** — Yalnızca kullanıcı ihale açar: `engine.py` içinde `_open_needed_tenders` ve `_evaluate_tender` yok; ürünler 0 kg stoğa düşerken kendiliğinden ihale oluşmadı (yalnızca elle açılanlar listelendi).
+3. **PASS** — Teklif gizliliği ve kabul: `OPEN` yanıtında fiyat/miktar alanları yok; `EVALUATION`'da teklifler görünür; UI'da 500 kg kısmi kabul sonrası satır `Kısmi kabul 500 kg` oldu ve aynı teklife ikinci kabul `409 OFFER_ALREADY_ACCEPTED` döndü.
+4. **PASS** — Çoklu NPC: 800 kg + kısmi kabullerle toplam kabul ≤ istenen miktar; `remaining_need_kg` ve `accepted_total_kg` yanıtlarda doğrulandı.
+5. **PASS** — Nakliye: hariç teklif `AWAITING_CARRIER` doğdu, nakliyeci atanınca `IN_TRANSIT` oldu, teslim `max(hazırlık, atama) + taşıma` anında gerçekleşti ve maliyet `landed_cost_tl` olarak yazıldı.
+6. **PASS** — Seed: mevcut veritabanında `python -m app.seed` sonrası 10 NPC, 30 kural, 4 nakliyeci; ikinci çalıştırma yeni kayıt eklemedi (idempotent).
+7. **PASS** — Hız: 10 sn'de 3x → 29,23 sim sn, 0,5x → 4,98 sn, Dur → 0,00 sn; backend restart sonrası `speed=2.00` korundu ve simülasyon duraklatıldı.
+8. **PASS** — Maliyet: teslimat sonrası ortalama maliyet 13,00 → 12,084493 TL/kg düştü, stok değeri arttı; `/stock-metrics/history` noktaları üretildi.
+9. **PASS** — Testler/derleme: `pytest -q` 19 passed; `npm test` (üretim derlemesi) başarılı; 6 route headless Chrome'da hatasız render edildi.
+10. **PASS** — Migration: dolu veritabanında `alembic upgrade head` çalıştı; backfill (kapasite/maliyet) uygulandı, veri kaybı olmadı.
 
 ## Veri kalıcılığı
 
@@ -149,6 +155,6 @@ Teklifler yaklaşık iki saniyede polling ile güncellenir. Ekranlarda yükleniy
 
 ## Bilinen notlar
 
-- Docker volume daha önce kullanılmışsa seed mevcut kayıtları koruduğu için eski demo kayıtları listede kalabilir. Tamamen temiz demo için kullanıcı kontrollü olarak `docker compose down -v` sonrası yeniden başlatabilir.
-- Docker build sırasında npm audit bağımlılık ağacında uyarılar bildirebilir; production build başarılıdır.
-
+- Eski demo verileri (otomatik açılmış ihaleler, 3 NPC'lik kural seti) volume'da kalabilir; seed eklemeli çalıştığı için bunlar silinmez. Temiz bir demo için kullanıcı kontrollü `docker compose down -v` sonrası yeniden başlatın.
+- Eski ihalelerin `evaluate_at_seconds` ve `winning_participation_id` alanları geriye dönük uyumluluk için durur, yeni akışta kullanılmaz.
+- Nakliye hariç bir award, nakliyeci atanmadan teslim edilmez ve boş kapasiteyi işgal etmeye devam eder.

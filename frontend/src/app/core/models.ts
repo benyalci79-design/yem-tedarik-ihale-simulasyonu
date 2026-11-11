@@ -1,6 +1,7 @@
 export interface SimulationState {
   is_running: boolean;
   elapsed_seconds: string;
+  speed: string;
   last_error: string | null;
 }
 
@@ -19,6 +20,12 @@ export interface Product {
   critical_coverage_minutes: string;
   target_coverage_minutes: string;
   offer_window_seconds: number;
+  capacity_kg: string;
+  avg_cost_per_kg: string;
+  incoming_kg: string;
+  free_capacity_kg: string;
+  stock_value_tl: string;
+  suggested_quantity_ton: string;
   coverage_minutes: string;
   active_tenders: ActiveTender[];
 }
@@ -36,6 +43,47 @@ export interface NpcRule {
   max_price: string;
   min_delivery_minutes: number;
   max_delivery_minutes: number;
+  freight_included: boolean;
+  min_available_kg: string;
+  max_available_kg: string;
+}
+
+export interface TenderOffer {
+  participation_id: number;
+  npc_supplier_id: number;
+  npc_name: string;
+  offer_status: string;
+  unit_price?: string;
+  unit_price_per_kg?: string;
+  offered_quantity_kg?: string;
+  accepted_quantity_kg?: string;
+  delivery_minutes?: number;
+  freight_included?: boolean;
+  submitted_at_seconds?: string;
+  decision?: string;
+  decision_reason?: string | null;
+  max_acceptable_kg?: string;
+}
+
+export interface TenderAward {
+  id: number;
+  participation_id: number;
+  npc_supplier_id: number;
+  npc_name: string;
+  quantity_kg: string;
+  unit_price_per_ton: string;
+  unit_price_per_kg: string;
+  freight_included: boolean;
+  carrier_id: number | null;
+  carrier_name: string | null;
+  carrier_price_per_ton: string | null;
+  status: string;
+  accepted_at_seconds: string;
+  carrier_assigned_at_seconds: string | null;
+  delivery_due_at_seconds: string | null;
+  delivered_at_seconds: string | null;
+  landed_cost_tl: string | null;
+  remaining_seconds: string | null;
 }
 
 export interface TenderSummary {
@@ -51,20 +99,11 @@ export interface TenderSummary {
   remaining_seconds: string;
   invited_count: number;
   offer_count: number;
+  accepted_total_kg: string;
+  remaining_need_kg: string;
+  free_capacity_kg: string;
   result_reason: string | null;
-}
-
-export interface TenderOffer {
-  participation_id: number;
-  npc_supplier_id: number;
-  npc_name: string;
-  offer_status: string;
-  unit_price?: string;
-  total_amount?: string;
-  delivery_minutes?: number;
-  submitted_at_seconds?: string;
-  decision?: string;
-  decision_reason?: string | null;
+  awards: TenderAward[];
 }
 
 export interface TenderDetail extends TenderSummary {
@@ -73,4 +112,72 @@ export interface TenderDetail extends TenderSummary {
   delivery_due_at_seconds: string | null;
   delivered_at_seconds: string | null;
   delivery_status: string | null;
+}
+
+export interface Carrier {
+  id: number;
+  code: string;
+  name: string;
+  price_per_ton: string;
+  price_per_kg: string;
+  transit_minutes: number;
+  is_active: boolean;
+}
+
+export interface Shipment {
+  award_id: number;
+  tender_id: number;
+  tender_code: string;
+  product_id: number;
+  product_name: string;
+  npc_supplier_id: number;
+  npc_name: string;
+  quantity_kg: string;
+  unit_price_per_ton: string;
+  unit_price_per_kg: string;
+  freight_included: boolean;
+  delivery_minutes: number;
+  status: string;
+  accepted_at_seconds: string;
+  carrier_id: number | null;
+  carrier_name: string | null;
+  carrier_price_per_ton: string | null;
+  carrier_assigned_at_seconds: string | null;
+  delivery_due_at_seconds: string | null;
+  delivered_at_seconds: string | null;
+  remaining_seconds: string | null;
+  landed_cost_tl: string | null;
+}
+
+export interface StockMetricItem {
+  product_id: number;
+  product_code?: string;
+  product_name: string;
+  stock_kg: string;
+  avg_cost_per_kg: string;
+  value_tl: string;
+}
+
+export interface StockMetrics {
+  items: StockMetricItem[];
+  total_stock_kg: string;
+  total_value_tl: string;
+  total_avg_cost_per_kg: string;
+}
+
+export interface HistoryPoint {
+  elapsed_seconds: string;
+  total_stock_kg: string;
+  total_value_tl: string;
+  total_avg_cost_per_kg: string;
+  products: StockMetricItem[];
+}
+
+export interface ChartSeries {
+  id: string;
+  label: string;
+  color: string;
+  dash: string;
+  marker: 'circle' | 'square' | 'triangle';
+  values: number[];
 }

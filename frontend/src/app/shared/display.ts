@@ -8,9 +8,9 @@ export function numberTr(value: string | number, digits = 2): string {
 
 export function statusLabel(status: string): string {
   return {
-    OPEN: 'Açık / Teklif toplanıyor',
-    EVALUATION: 'Değerlendirmede',
-    AWARDED: 'Kabul edildi / Teslim bekleniyor',
+    OPEN: 'Teklif toplanıyor',
+    EVALUATION: 'Karar bekliyor',
+    AWARDED: 'Teslimatta',
     DELIVERED: 'Teslim edildi',
     NO_AWARD: 'Sonuçsuz'
   }[status] ?? status;
@@ -24,4 +24,21 @@ export function statusIcon(status: string): string {
     DELIVERED: '✓',
     NO_AWARD: '—'
   }[status] ?? '•';
+}
+
+export function awardStatusLabel(status: string): string {
+  return {
+    AWAITING_CARRIER: 'Nakliyeci bekliyor',
+    IN_TRANSIT: 'Yolda',
+    DELIVERED: 'Teslim edildi'
+  }[status] ?? status;
+}
+
+export function decisionLabel(decision?: string | null): string {
+  return {
+    PENDING: 'Bekliyor',
+    ACCEPTED: 'Kabul edildi',
+    PARTIAL: 'Kısmi kabul',
+    REJECTED: 'Reddedildi'
+  }[decision ?? ''] ?? (decision ?? '—');
 }

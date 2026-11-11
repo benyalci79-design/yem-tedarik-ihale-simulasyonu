@@ -1,7 +1,17 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { NpcRule, Product, SimulationState, TenderDetail, TenderSummary } from './models';
+import {
+  Carrier,
+  HistoryPoint,
+  NpcRule,
+  Product,
+  Shipment,
+  SimulationState,
+  StockMetrics,
+  TenderDetail,
+  TenderSummary,
+} from './models';
 
 export function apiErrorMessage(error: unknown, fallback: string): string {
   const response = error as { error?: { error?: { message?: unknown } } };
@@ -24,6 +34,10 @@ export class ApiService {
 
   pauseSimulation(): Observable<SimulationState> {
     return this.http.post<SimulationState>(this.base + '/simulation/pause', {});
+  }
+
+  setSpeed(speed: string): Observable<SimulationState> {
+    return this.http.post<SimulationState>(this.base + '/simulation/speed', { speed });
   }
 
   products(): Observable<{ items: Product[] }> {
@@ -53,5 +67,49 @@ export class ApiService {
 
   tender(id: number): Observable<TenderDetail> {
     return this.http.get<TenderDetail>(this.base + '/tenders/' + id);
+  }
+
+  createTender(productId: number, quantityTon: number): Observable<TenderDetail> {
+    return this.http.post<TenderDetail>(this.base + '/tenders', {
+      product_id: productId,
+      quantity_ton: quantityTon.toFixed(3),
+    });
+  }
+
+  acceptOffer(tenderId: number, participationId: number, quantityKg: number): Observable<TenderDetail> {
+    return this.http.post<TenderDetail>(this.base + '/tenders/' + tenderId + '/accept', {
+      participation_id: participationId,
+      quantity_kg: quantityKg.toFixed(3),
+    });
+  }
+
+  finalizeTender(tenderId: number): Observable<TenderDetail> {
+    return this.http.post<TenderDetail>(this.base + '/tenders/' + tenderId + '/finalize', {});
+  }
+
+  carriers(): Observable<{ items: Carrier[] }> {
+    return this.http.get<{ items: Carrier[] }>(this.base + '/carriers');
+  }
+
+  shipments(status?: string): Observable<{ items: Shipment[] }> {
+    let params = new HttpParams();
+    if (status) params = params.set('status', status);
+    return this.http.get<{ items: Shipment[] }>(this.base + '/shipments', { params });
+  }
+
+  assignCarrier(awardId: number, carrierId: number): Observable<Shipment> {
+    return this.http.post<Shipment>(this.base + '/shipments/' + awardId + '/assign-carrier', {
+      carrier_id: carrierId,
+    });
+  }
+
+  stockMetrics(): Observable<StockMetrics> {
+    return this.http.get<StockMetrics>(this.base + '/stock-metrics');
+  }
+
+  stockHistory(limit = 300): Observable<{ items: HistoryPoint[] }> {
+    return this.http.get<{ items: HistoryPoint[] }>(this.base + '/stock-metrics/history', {
+      params: new HttpParams().set('limit', limit),
+    });
   }
 }

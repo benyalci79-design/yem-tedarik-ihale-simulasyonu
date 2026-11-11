@@ -51,6 +51,7 @@ def serialize_shipment(award: TenderAward, elapsed: Decimal) -> dict:
         "unit_price_per_ton": str(award.unit_price_per_ton),
         "unit_price_per_kg": str(price_per_ton_to_per_kg(Decimal(award.unit_price_per_ton))),
         "freight_included": award.freight_included,
+        "delivery_minutes": participation.delivery_minutes,
         "status": award.status,
         "accepted_at_seconds": str(award.accepted_at_seconds),
         "carrier_id": award.carrier_id,
