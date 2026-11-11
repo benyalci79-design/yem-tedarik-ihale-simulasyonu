@@ -52,10 +52,13 @@ def list_rules(
 
 @router.patch("/{rule_id}")
 def update_rule(rule_id: int, payload: NpcRulePatch, db: Session = Depends(get_db)) -> dict:
-    rule = db.get(NpcRule, rule_id)
+    # Tick ve ayar API'si aynı kilit sırasını kullanır: simülasyon, sonra
+    # ilgili ürün/kural. Böylece davet anlık görüntüsü kısmen güncellenmez.
+    state = db.get(SimulationState, 1, with_for_update=True)
+    rule = db.get(NpcRule, rule_id, with_for_update=True)
     if rule is None:
         raise ApiError(404, "NOT_FOUND", "NPC kuralı bulunamadı.")
-    state = db.get(SimulationState, 1)
+    db.get(Product, rule.product_id, with_for_update=True)
     if state is not None and state.is_running:
         raise ApiError(409, "SETTINGS_LOCKED", "Simülasyon çalışırken NPC kuralı değiştirilemez.")
     if product_has_active_tender(db, rule.product_id):

@@ -24,6 +24,16 @@ class FixedRng:
         return next(self.integers)
 
 
+class CapturingRng(FixedRng):
+    def __init__(self, integers: list[int]):
+        super().__init__(random_value=0.0, integers=integers)
+        self.bounds: tuple[int, int] | None = None
+
+    def randint(self, start: int, end: int) -> int:
+        self.bounds = (start, end)
+        return super().randint(start, end)
+
+
 def test_consumption_never_makes_stock_negative():
     assert consume_stock(Decimal("10"), Decimal("100"), Decimal("60")) == Decimal("0")
 
@@ -42,6 +52,13 @@ def test_quantity_is_rounded_up_to_thousandth_ton():
 def test_probability_boundaries():
     assert schedule_response(Decimal("0"), Decimal("60"), Decimal("0"), FixedRng(0.0)).will_respond is False
     assert schedule_response(Decimal("0"), Decimal("60"), Decimal("1"), FixedRng(0.999, [10])).will_respond is True
+
+
+def test_response_window_respects_decimal_opening_and_closing_boundaries():
+    rng = CapturingRng([13750])
+    plan = schedule_response(Decimal("12.750"), Decimal("72.750"), Decimal("1"), rng)
+    assert rng.bounds == (13750, 71750)
+    assert plan.response_at_seconds == Decimal("13.750")
 
 
 def test_offer_price_and_delivery_are_inclusive():

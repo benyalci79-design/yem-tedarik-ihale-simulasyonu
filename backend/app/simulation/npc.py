@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 from random import Random
 from typing import Protocol
 
@@ -27,14 +27,23 @@ def schedule_response(
     response_probability: Decimal,
     rng: Rng,
 ) -> OfferPlan:
+    """Cevap planını açılış/kapanış sınırlarını ihlal etmeden tek kez üretir.
+
+    Simülasyon anları milisaniye hassasiyetinde tutulduğu için ``int`` ile
+    aşağı yuvarlamak, örneğin 12.750. saniyede açılan bir ihaleye 13.000.
+    saniyede (yalnızca 0.250 saniye sonra) cevap planlanmasına yol açardı.
+    RNG aralığı milisaniye tamsayılarıyla çalıştırılarak alt/üst sınırlar
+    açılıştan tam 1 saniye sonrası ve kapanıştan tam 1 saniye öncesi olur.
+    """
     will_respond = rng.random() < float(response_probability)
     if not will_respond:
         return OfferPlan(False, None)
-    first = int(opened_at_seconds) + 1
-    last = int(closes_at_seconds) - 1
+    scale = Decimal("1000")
+    first = int((opened_at_seconds * scale).to_integral_value(rounding=ROUND_CEILING)) + 1000
+    last = int((closes_at_seconds * scale).to_integral_value(rounding=ROUND_FLOOR)) - 1000
     if first > last:
         return OfferPlan(False, None)
-    return OfferPlan(True, Decimal(rng.randint(first, last)))
+    return OfferPlan(True, (Decimal(rng.randint(first, last)) / scale).quantize(Decimal("0.001")))
 
 
 def generate_offer(

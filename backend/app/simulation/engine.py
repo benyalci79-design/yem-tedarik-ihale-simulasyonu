@@ -289,8 +289,13 @@ class SimulationEngine:
             tender.status = new_status
 
     def _open_needed_tenders(self, db, now: Decimal) -> None:
-        products = db.scalars(select(Product).order_by(Product.id)).all()
-        for product in products:
+        product_ids = db.scalars(select(Product.id).order_by(Product.id)).all()
+        for product_id in product_ids:
+            # Ayar API'si ile aynı ürün üzerinde yarışmamak için ürün satırını
+            # aktif süreç kontrolünden ve ihale eklemeden önce kilitle.
+            product = db.get(Product, product_id, with_for_update=True)
+            if product is None:
+                continue
             if now < Decimal(product.next_eligible_at_seconds):
                 continue
             active = db.scalar(

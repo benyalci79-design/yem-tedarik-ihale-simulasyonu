@@ -53,10 +53,12 @@ def list_products(db: Session = Depends(get_db)) -> dict:
 
 @router.patch("/{product_id}")
 def update_product(product_id: int, payload: ProductPatch, db: Session = Depends(get_db)) -> dict:
-    product = db.get(Product, product_id)
+    # Motor tick'i de önce simülasyon sonra ürün satırını kilitler; aynı sıra
+    # ayar değişikliğinde korunarak ara durumda kısmi güncelleme önlenir.
+    state = db.get(SimulationState, 1, with_for_update=True)
+    product = db.get(Product, product_id, with_for_update=True)
     if product is None:
         raise ApiError(404, "NOT_FOUND", "Ürün bulunamadı.")
-    state = db.get(SimulationState, 1)
     if state is not None and state.is_running:
         raise ApiError(409, "SETTINGS_LOCKED", "Simülasyon çalışırken ürün ayarı değiştirilemez.")
     if _active_tenders(db, product.id):
