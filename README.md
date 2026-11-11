@@ -88,6 +88,13 @@ $env:PYTHONPATH = "backend"
 python -m pytest -q
 ```
 
+Frontend için ayrı bir tarayıcı birim test paketi kurulmamıştır; `npm test` üretim derlemesini çalıştıran bir smoke test komutudur:
+
+```powershell
+cd frontend
+npm test
+```
+
 Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, olasılık sınırları, fiyat ve teslim sınırları, uygun teklif seçimi, acil kabul, eşitlik, idempotent teslimat ve aynı zamandaki kronolojik olay sırası.
 
 ## Ekranlar
