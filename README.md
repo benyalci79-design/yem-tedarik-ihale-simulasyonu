@@ -73,6 +73,9 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - **Kabul:** Kullanıcı bir tekliften `quantity_kg` kadar kabul eder. Üst sınır `min(teklif miktarı, kalan ihtiyaç, boş kapasite)`. Bir tekliften yalnızca bir kez miktar alınır; miktar teklifin tamamıysa `ACCEPTED`, azıysa `PARTIAL`. İhale birden fazla NPC'den karşılanabilir.
 - **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
 - **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
+- **Fire:** Her ürünün `loss_percent` oranı vardır (MISR %1, ARPA %0,5, SOYA %1,5). Teslimatta kabul edilen kg `quantity × (1 − fire)` olur; ödenen tutar değişmediği için **birim maliyet yükselir**. Fire miktarı award'da `loss_kg` olarak saklanır.
+- **Mevsimsellik:** Her ürünün `season_amplitude` genliği vardır. Teklif fiyatı, açılış anındaki `1 + genlik × sin(2π t / 3600 + faz)` katsayısıyla üretilir; katsayı teklifte `season_factor` olarak saklanır. Böylece aynı NPC farklı dönemlerde farklı fiyat verir.
+- **Bütçe:** Aylık (3600 sim saniyelik dönem) satın alma limiti `budgets` tablosunda tutulur (varsayılan 500.000 TL). Dönem harcaması, kabul edilen award'ların maliyetiyle hesaplanır; %80'de uyarı, limit aşımında teklif kabulü `422 BUDGET_EXCEEDED` ile reddedilir. Limit `PATCH /budget` ile (simülasyon duraklatılmışken) değiştirilir.
 - **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
 - **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; ardından **demo geçmişini** (5 tamamlanmış ihale, award'ları ve stok geçmişi) yeniden yükler. Saat bu geçmişin bittiği ana (1800 sn) alınır, hız 1x olur ve simülasyon duraklatılır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
 
@@ -99,6 +102,9 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - `GET /carriers`, `GET /shipments?status=`, `POST /shipments/{award_id}/assign-carrier`
 - `GET /stock-metrics`, `GET /stock-metrics/history?limit=`
 - `GET /purchase-stats`
+- `GET|PATCH /budget`
+- `GET /supplier-scores`
+- `GET /notifications`
 
 Decimal değerler JSON'da dizge olarak döner. Liste yanıtları `{items:[...]}`, hatalar `{error:{code,message}}` biçimindedir.
 
@@ -112,8 +118,9 @@ Entrypoint sırası:
 
 Seed **eklemelidir**: mevcut kayıtları ve ayarları değiştirmez, yalnızca eksikleri ekler.
 
-- 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet).
+- 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet; fire %1 / %0,5 / %1,5; mevsim genliği %8 / %6 / %10).
 - **Demo geçmişi:** veritabanı boşsa (ilk kurulum veya sıfırlama sonrası) 300–1500 sn aralığında tamamlanmış **5 ihale**, teklifleri, award'ları ve stok geçmişi eklenir. Böylece kullanıcı ilk açılışta ürünlerin son/en ucuz/en pahalı/ortalama alım fiyatlarını görür. Geçmiş doluysa seed dokunmaz.
+- 1 bütçe kaydı (`YEM-HAM`, aylık 500.000 TL).
 - **10 NPC** (A–J). Cevap olasılıkları 0,00–1,00; teslim süreleri 1–8 dk; 4 NPC nakliye hariç ve bu yüzden %5–10 daha ucuz; teklif miktarları 300–6000 kg arasında değişir, böylece 2–3 tonluk bir ihale genelde tek NPC'den karşılanmaz.
 - Her NPC için her üründe bir kural (30 kural).
 - **4 nakliyeci:** Toplu Yük (150 TL/ton, 12 dk), Ekonomik (180, 8), Standart (450, 5), Ekspres (900, 2).
@@ -150,8 +157,9 @@ Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, ola
 - `/tenders`: İhale Listesi — üstte **tüm ürünlerin alım fiyatı barı** (son / en ucuz / en pahalı / ortalama), **yeni ihale açma paneli** (önerilen miktar ve boş kapasite ile), filtreler, kabul özeti.
 - `/tenders/:id`: İhale Detayı — üstte **kompakt stok şeridi** (depo doluluğu, yoldaki miktar, boş kapasite, **son alım birim fiyatı**, ortalama maliyet), gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, her teklifte son alıma göre **yeşil ▲ (daha ucuz) / kırmızı ▼ (daha pahalı)** işareti, "İhaleyi tamamla", teslimat/award listesi.
 - `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
+- `/suppliers`: Tedarikçiler — NPC performans skorları (fiyat rekabeti, katılım, kazanma oranı, ortalama teslim süresi).
 
-Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati ve onay penceresi açan **Sıfırla** düğmesi tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
+Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati, onay penceresi açan **Sıfırla** düğmesi ve **bildirim zili** (okunmamış sayacı + panel) tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
 
 ## Frontend notları
 
@@ -178,6 +186,12 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 12. **PASS** — Sıfırlama: `POST /simulation/reset` sonrası tüm eski ihaleler silindi, yerine 5 demo ihalesi (300–1500 sn, DELIVERED) geldi; ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 1800 sn, hız 1x, durum duraklatıldı. Arayüzde Sıfırla → onay penceresi → "Vazgeç" kapatıyor, "Evet, sıfırla" sonrası sayfa `/` adresine dönüp 1.800,0 sn gösteriyor.
 13. **PASS** — Alım barı ve yön işaretleri: `GET /purchase-stats` demo geçmişiyle MISR 8,90/8,60/8,90/8,736, ARPA 7,90/7,60/7,90/7,733 ve SOYA 13,00 döndü; teklif ekranında son alıma göre yeşil ▲ / kırmızı ▼ işaretleri render edildi (headless Chrome DOM).
 14. **PASS** — Demo geçmişi: sıfırlama sonrası ihale listesinde 5 tamamlanmış ihale, `purchase-stats`'ta 2/2/1 alım ve `stock-metrics/history`'de 11 nokta oluştu; ilk açılışta alım fiyatı barı dolu geliyor.
+15. **PASS** — Fire: 500 kg'lık teslimat %1 fire ile 495 kg kabul edildi (`loss_kg=5`), ortalama maliyet 8,75 → 8,794 TL/kg yükseldi; `stock-metrics.total_loss_kg/tl` 5 kg / 43,75 TL döndü.
+16. **PASS** — Mevsimsellik: teklifler açılış anındaki katsayıyla üretildi (×0,934); ürün detayında "Sezon ×0,93", teklif satırında "sezon ×0,93" göründü.
+17. **PASS** — Bütçe: 500.000 TL limit, 57.014,92 TL harcama (%11,40) ve 442.985,08 TL kalan döndü; limit 1.000 TL'ye çekilince 100 kg kabul `422 BUDGET_EXCEEDED` ("Kalan: 0.00 TL, bu alım: 919.33 TL") ile reddedildi.
+18. **PASS** — Tedarikçi skorcard: 10 NPC için skor üretildi (NPC-A 91 … NPC-C/I 0); `/suppliers` tablosu skor çubuğu ve metriklerle render edildi.
+19. **PASS** — Bildirim kutusu: 5 aktif bildirim (kritik stok, karar bekleyen ihale, sezon) üretildi; zil sayacı 5, panel 5 satır gösterdi, konsol hatası yok.
+20. **PASS** — İzole dev ortamı: 18080/18000 ayrı stack ve ayrı veritabanı; ana demo 8080 sağlıklı kaldı.
 
 ## Veri kalıcılığı
 
@@ -188,3 +202,5 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 - Eski demo verileri (otomatik açılmış ihaleler, 3 NPC'lik kural seti) volume'da kalabilir; seed eklemeli çalıştığı için bunlar silinmez. Temiz bir demo için kullanıcı kontrollü `docker compose down -v` sonrası yeniden başlatın.
 - Eski ihalelerin `evaluate_at_seconds` ve `winning_participation_id` alanları geriye dönük uyumluluk için durur, yeni akışta kullanılmaz.
 - Nakliye hariç bir award, nakliyeci atanmadan teslim edilmez ve boş kapasiteyi işgal etmeye devam eder.
+- Bildirim kutusunda "okundu" durumu tarayıcıda (`localStorage`) tutulur; kullanıcı/oturum yönetimi (A1) eklendiğinde sunucu tarafına taşınmalıdır.
+- Bütçe dönemi demo için 3600 sim saniyedir (1 sim saati = 1 ay). Gerçek takvim entegrasyonu kapsam dışıdır.
