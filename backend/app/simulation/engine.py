@@ -76,7 +76,10 @@ class SimulationEngine:
             self.tick_once()
             with self.session_factory.begin() as db:
                 state = db.get(SimulationState, 1, with_for_update=True)
-                if state is not None:
+                if state is None:
+                    state = SimulationState(id=1, is_running=False, elapsed_seconds=ZERO)
+                    db.add(state)
+                else:
                     state.is_running = False
                     state.last_tick_at = None
                 return state
