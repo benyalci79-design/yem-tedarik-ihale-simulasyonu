@@ -82,6 +82,12 @@ PDF’deki v4.0 kuralı gereği kapanışa tam eşit NPC cevabı kabul edilmez; 
 
 Decimal değerler JSON'da dizge olarak döner. Liste yanıtları `{items:[...]}`, hatalar `{error:{code,message}}` biçimindedir.
 
+## Frontend notları (ekran güncellenmiyor sorunu)
+
+- Angular 21, `bootstrapApplication` çağrısında **zone.js yüklü olsa bile zoneless change detection** kullanır. Bu uygulama RxJS abonelikleri, `timer` ve HTTP geri dönüşleriyle klasik biçimde yazıldığı için `app.config.ts` içindeki `provideZoneChangeDetection({ eventCoalescing: true })` zorunludur. Bu sağlayıcı kaldırılırsa veri gelir ama ekran güncellenmez; sayfalar "hazırlanıyor" ekranında kalır ve simülasyon saati donar.
+- `src/index.html` içindeki `<base href="/">` sayesinde `/tenders/7` gibi derin bağlantılar ve o sayfada F5 doğrudan çalışır. Etiket kaldırılırsa alt yolda JS paketleri 404 alır ve sayfa boş açılır.
+- Üretim derlemesi içerik hash'li dosya üretir (`main-XXXXXXXX.js`); Nginx `index.html` için `Cache-Control: no-cache` döner, böylece yeni sürüm yayınlandığında tarayıcı eski paketi göstermez.
+
 ## Test
 
 Saf iş kuralı testleri DB ve gerçek zaman beklemesi gerektirmez:

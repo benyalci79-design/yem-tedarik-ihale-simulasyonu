@@ -22,7 +22,7 @@
             "scripts": []
           },
           "configurations": {
-            "production": {"optimization": true, "extractLicenses": true, "sourceMap": false},
+            "production": {"optimization": true, "extractLicenses": true, "sourceMap": false, "outputHashing": "all"},
             "development": {"optimization": false, "extractLicenses": false, "sourceMap": true}
           },
           "defaultConfiguration": "production"
