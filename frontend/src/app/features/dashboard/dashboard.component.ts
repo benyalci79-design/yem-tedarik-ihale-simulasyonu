@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { catchError, EMPTY, forkJoin, switchMap, timer } from 'rxjs';
+import { catchError, EMPTY, finalize, forkJoin, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../../core/api.service';
 import { Product, SimulationState } from '../../core/models';
@@ -12,7 +12,7 @@ import { numberTr } from '../../shared/display';
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <section class="page-heading"><div><p class="eyebrow">YÖNETİCİ KONSOLU</p><h1>Simülasyon özeti</h1><p class="lede">Stok, aktif ihaleler ve simülasyon saati tek bakışta.</p></div><div class="actions"><button class="button primary" [disabled]="loading || simulation?.is_running" (click)="start()">{{ simulation?.is_running ? 'Simülasyon çalışıyor' : 'Simülasyonu başlat' }}</button><button class="button ghost" [disabled]="loading || !simulation?.is_running" (click)="pause()">Duraklat</button></div></section>
+    <section class="page-heading"><div><p class="eyebrow">YÖNETİCİ KONSOLU</p><h1>Simülasyon özeti</h1><p class="lede">Stok, aktif ihaleler ve simülasyon saati tek bakışta.</p></div><div class="actions"><button class="button primary" [disabled]="loading || actionLoading || simulation?.is_running" (click)="start()">{{ simulation?.is_running ? 'Simülasyon çalışıyor' : (actionLoading ? 'Başlatılıyor...' : 'Simülasyonu başlat') }}</button><button class="button ghost" [disabled]="loading || actionLoading || !simulation?.is_running" (click)="pause()">{{ actionLoading ? 'İşleniyor...' : 'Duraklat' }}</button></div></section>
     <div *ngIf="error" class="alert">{{ error }} <button class="link-button" (click)="reload()">Yeniden dene</button></div>
     <div *ngIf="loading && !simulation" class="skeleton-grid"><div class="skeleton" *ngFor="let item of [1,2,3]"></div></div>
     <ng-container *ngIf="simulation as state"><section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ numberTr(state.elapsed_seconds, 1) }} sn</strong></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section><div *ngIf="state.last_error" class="alert">{{ state.last_error }}</div></ng-container>
@@ -28,26 +28,67 @@ export class DashboardComponent {
   simulation: SimulationState | null = null;
   products: Product[] = [];
   loading = true;
+  actionLoading = false;
   error = '';
   readonly Number = Number;
   readonly numberTr = numberTr;
 
-  constructor() { this.reload(); }
+  constructor() { this.startPolling(); }
 
   reload(): void {
     this.loading = true;
-    timer(0, 2000).pipe(
-      switchMap(() => forkJoin({ simulation: this.api.simulation(), products: this.api.products() })),
-      catchError(() => { this.error = 'Backend bağlantısını kontrol edin.'; this.loading = false; return EMPTY; }),
-      takeUntilDestroyed(this.destroyRef)
-    ).subscribe(({ simulation, products }) => {
-      this.simulation = simulation;
-      this.products = products.items;
-      this.loading = false;
-      this.error = '';
+    this.loadSnapshot().subscribe({
+      next: snapshot => this.applySnapshot(snapshot),
+      error: () => this.showLoadError(),
     });
   }
 
-  start(): void { this.api.startSimulation().subscribe(() => this.reload(), () => this.error = 'Simülasyon başlatılamadı.'); }
-  pause(): void { this.api.pauseSimulation().subscribe(() => this.reload(), () => this.error = 'Simülasyon duraklatılamadı.'); }
+  start(): void {
+    if (this.actionLoading || this.loading || this.simulation?.is_running) return;
+    this.actionLoading = true;
+    this.error = '';
+    this.api.startSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({
+      next: state => {
+        this.simulation = state;
+        this.loading = false;
+      },
+      error: () => this.error = 'Simülasyon başlatılamadı. Backend bağlantısını kontrol edin.',
+    });
+  }
+
+  pause(): void {
+    if (this.actionLoading || this.loading || !this.simulation?.is_running) return;
+    this.actionLoading = true;
+    this.error = '';
+    this.api.pauseSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({
+      next: state => {
+        this.simulation = state;
+        this.loading = false;
+      },
+      error: () => this.error = 'Simülasyon duraklatılamadı. Backend bağlantısını kontrol edin.',
+    });
+  }
+
+  private startPolling(): void {
+    timer(0, 2000).pipe(
+      switchMap(() => this.loadSnapshot().pipe(catchError(() => { this.showLoadError(); return EMPTY; }))),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(snapshot => this.applySnapshot(snapshot));
+  }
+
+  private loadSnapshot() {
+    return forkJoin({ simulation: this.api.simulation(), products: this.api.products() });
+  }
+
+  private applySnapshot(snapshot: { simulation: SimulationState; products: { items: Product[] } }): void {
+    this.simulation = snapshot.simulation;
+    this.products = snapshot.products.items;
+    this.loading = false;
+    this.error = '';
+  }
+
+  private showLoadError(): void {
+    this.error = 'Backend bağlantısını kontrol edin.';
+    this.loading = false;
+  }
 }
