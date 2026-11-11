@@ -25,7 +25,9 @@ import { simCalendarText } from './display';
           (click)="setSpeed(speed)"
         >{{ speedLabel(speed) }}</button>
       </div>
-      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür">Sıfırla</button>
+      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür" aria-label="Simülasyonu sıfırla">
+        <span class="reset-icon" aria-hidden="true">⟲</span><span class="reset-label">Sıfırla</span>
+      </button>
       <span class="sim-error" *ngIf="error">{{ error }}</span>
     </div>
 
@@ -57,7 +59,10 @@ import { simCalendarText } from './display';
     '.segmented button:last-child { border-right:0; }',
     '.segmented button:hover:not(:disabled) { background:#374151; color:#fff; }',
     '.segmented button.active { background:#1d4ed8; color:#fff; }',
-    '.reset-button { flex-shrink:0; border:1px solid #7f1d1d; background:#1f2937; color:#fca5a5; font-size:.82rem; font-weight:750; padding:.4rem .65rem; border-radius:.55rem; cursor:pointer; }',
+    '.reset-button { flex-shrink:0; display:inline-flex; align-items:center; gap:.3rem; border:1px solid #7f1d1d; background:#1f2937; color:#fca5a5; font-size:.82rem; font-weight:750; padding:.4rem .65rem; border-radius:.55rem; cursor:pointer; }',
+    '.reset-icon { font-size:.95rem; line-height:1; }',
+    '@media(max-width:1700px){ .reset-label{display:none} .reset-button{padding:.4rem .5rem} }',
+    '@media(max-width:1500px){ .segmented button{padding:.35rem .45rem; font-size:.78rem} }',
     '.reset-button:hover:not(:disabled) { background:#7f1d1d; color:#fff; }',
     '.reset-button:disabled, .segmented button:disabled { opacity:.55; cursor:progress; }',
     '.sim-error { color:#fca5a5; font-size:.75rem; }',

@@ -6,8 +6,9 @@ import { catchError, EMPTY, finalize, forkJoin, merge, Subject, switchMap, timer
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Product, PurchaseStatsItem, TenderSummary } from '../../core/models';
-import { numberTr } from '../../shared/display';
+import { numberTr, simDurationShort } from '../../shared/display';
 import { StatusBadgeComponent } from '../../shared/status-badge.component';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-tenders',
@@ -60,7 +61,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     <div *ngIf="error" class="alert">{{ error }} <button class="link-button" (click)="load()">Yeniden dene</button></div>
     <div class="table" *ngIf="tenders.length">
       <div class="table-head"><span>İhale</span><span>Ürün</span><span>Miktar</span><span>Aşama</span><span>Kalan</span><span>Kabul</span><span></span></div>
-      <a class="table-row" *ngFor="let tender of tenders" [routerLink]="['/tenders', tender.id]"><div><strong>{{ tender.code }}</strong><small>{{ tender.offer_count }}/{{ tender.invited_count }} teklif</small></div><span>{{ tender.product_name }}</span><strong>{{ numberTr(tender.quantity_ton, 3) }} ton</strong><app-status-badge [status]="tender.status"></app-status-badge><span>{{ numberTr(tender.remaining_seconds, 1) }} sn</span><span class="accepted">{{ numberTr(tender.accepted_total_kg, 0) }} / {{ quantityKg(tender) }} kg</span><span class="arrow">→</span></a>
+      <a class="table-row" *ngFor="let tender of tenders" [routerLink]="['/tenders', tender.id]"><div><strong>{{ tender.code }}</strong><small>{{ tender.offer_count }}/{{ tender.invited_count }} teklif</small></div><span>{{ tender.product_name }}</span><strong>{{ numberTr(tender.quantity_ton, 3) }} ton</strong><app-status-badge [status]="tender.status"></app-status-badge><span>{{ tender.status === 'OPEN' ? simDurationShort(tender.remaining_seconds) : '—' }}</span><span class="accepted">{{ numberTr(tender.accepted_total_kg, 0) }} / {{ quantityKg(tender) }} kg</span><span class="arrow">→</span></a>
     </div>
     <div class="empty-state" *ngIf="!loading && !tenders.length"><strong>Henüz ihale yok</strong><span>Yukarıdaki panelden ilk ihaleyi açın.</span></div>
     <div class="loading" *ngIf="loading && !tenders.length">İhale listesi hazırlanıyor…</div>
@@ -97,6 +98,7 @@ export class TendersComponent {
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   products: Product[] = [];
   tenders: TenderSummary[] = [];
   stats: PurchaseStatsItem[] = [];
@@ -105,6 +107,7 @@ export class TendersComponent {
   createError = '';
   creating = false;
   readonly numberTr = numberTr;
+  readonly simDurationShort = simDurationShort;
   readonly filters = this.fb.group({ productId: [null as number | null], status: [''] });
   readonly createForm = this.fb.group({ productId: [null as number | null], quantityTon: [null as number | null] });
   private readonly refresh$ = new Subject<void>();
@@ -175,6 +178,7 @@ export class TendersComponent {
       .subscribe({
         next: (tender) => {
           this.createForm.patchValue({ quantityTon: null });
+          this.toast.show(`${tender.code} açıldı`);
           void this.router.navigate(['/tenders', tender.id]);
         },
         error: (error: unknown) => {

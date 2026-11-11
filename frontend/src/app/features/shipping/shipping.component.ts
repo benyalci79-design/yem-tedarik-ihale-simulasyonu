@@ -5,7 +5,8 @@ import { catchError, EMPTY, finalize, forkJoin, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Carrier, Shipment, SimulationState } from '../../core/models';
-import { awardStatusLabel, numberTr } from '../../shared/display';
+import { awardStatusLabel, numberTr, simDurationShort } from '../../shared/display';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-shipping',
@@ -34,7 +35,7 @@ import { awardStatusLabel, numberTr } from '../../shared/display';
           </select>
           <div class="preview" *ngIf="selected[shipment.award_id]">
             <strong>{{ numberTr(previewCost(shipment), 0) }} TL</strong>
-            <small>tahmini teslim ≈ {{ numberTr(previewDue(shipment), 0) }} sn</small>
+            <small>tahmini teslim ≈ {{ simDurationShort(previewDue(shipment)) }}</small>
           </div>
           <span *ngIf="!selected[shipment.award_id]" class="muted">—</span>
           <button type="button" class="button" [disabled]="!selected[shipment.award_id] || pending[shipment.award_id]" (click)="assign(shipment)">Nakliyeciyi ata</button>
@@ -54,8 +55,8 @@ import { awardStatusLabel, numberTr } from '../../shared/display';
           <span class="status {{ shipment.status.toLowerCase() }}">{{ awardStatusLabel(shipment.status) }}</span>
           <span>{{ shipment.carrier_name ?? 'Nakliye dahil' }}</span>
           <span>
-            <ng-container *ngIf="shipment.status === 'IN_TRANSIT'">{{ numberTr(shipment.remaining_seconds ?? 0, 0) }} sn kaldı</ng-container>
-            <ng-container *ngIf="shipment.status === 'DELIVERED'">{{ numberTr(shipment.delivered_at_seconds ?? 0, 0) }} sn'de teslim</ng-container>
+            <ng-container *ngIf="shipment.status === 'IN_TRANSIT'">{{ simDurationShort(shipment.remaining_seconds ?? 0) }} kaldı</ng-container>
+            <ng-container *ngIf="shipment.status === 'DELIVERED'">{{ simDurationShort(shipment.delivered_at_seconds ?? 0) }} teslim</ng-container>
           </span>
           <strong>{{ shipment.landed_cost_tl ? (numberTr(shipment.landed_cost_tl, 0) + ' TL') : '—' }}</strong>
         </div>
@@ -95,6 +96,7 @@ import { awardStatusLabel, numberTr } from '../../shared/display';
 export class ShippingComponent {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   simulation: SimulationState | null = null;
   carriers: Carrier[] = [];
   shipments: Shipment[] = [];
@@ -104,6 +106,7 @@ export class ShippingComponent {
   loading = true;
   error = '';
   readonly numberTr = numberTr;
+  readonly simDurationShort = simDurationShort;
   readonly awardStatusLabel = awardStatusLabel;
 
   constructor() {
@@ -178,6 +181,7 @@ export class ShippingComponent {
       .pipe(finalize(() => (this.pending[shipment.award_id] = false)))
       .subscribe({
         next: () => {
+          this.toast.show('Nakliyeci atandı, teslimat yola çıktı');
           delete this.selected[shipment.award_id];
           this.reload();
         },

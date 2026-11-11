@@ -5,8 +5,9 @@ import { catchError, EMPTY, finalize, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { TenderDetail, TenderOffer } from '../../core/models';
-import { awardStatusLabel, decisionLabel, numberTr } from '../../shared/display';
+import { awardStatusLabel, decisionLabel, numberTr, simDurationShort } from '../../shared/display';
 import { StatusBadgeComponent } from '../../shared/status-badge.component';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-tender-detail',
@@ -24,6 +25,13 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
           <p class="lede">{{ item.offer_count }}/{{ item.invited_count }} NPC teklif verdi<ng-container *ngIf="item.status === 'OPEN'"> · {{ numberTr(item.remaining_seconds, 0) }} sn kaldı</ng-container></p>
         </div>
         <app-status-badge [status]="item.status"></app-status-badge>
+      </section>
+
+      <section class="tender-steps" aria-label="İhale zaman çizelgesi">
+        <div class="step done"><span>1</span><strong>Açılış</strong><small>{{ simDurationShort(item.opened_at_seconds) }}</small></div>
+        <div class="step" [class.done]="item.status !== 'OPEN'"><span>2</span><strong>Teklif kapanışı</strong><small>{{ simDurationShort(item.offer_closes_at_seconds) }}</small></div>
+        <div class="step" [class.done]="item.status === 'AWARDED' || item.status === 'DELIVERED' || item.status === 'NO_AWARD'"><span>3</span><strong>Karar</strong><small>{{ item.awarded_at_seconds ? simDurationShort(item.awarded_at_seconds) : 'Bekliyor' }}</small></div>
+        <div class="step" [class.done]="item.status === 'DELIVERED'"><span>4</span><strong>Teslimat</strong><small>{{ item.delivered_at_seconds ? simDurationShort(item.delivered_at_seconds) : 'Bekliyor' }}</small></div>
       </section>
 
       <section class="stock-strip" aria-label="Ürün stok ve maliyet özeti">
@@ -130,8 +138,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
             </span>
             <span class="award-status {{ award.status.toLowerCase() }}">{{ awardStatusLabel(award.status) }}</span>
             <span>
-              <ng-container *ngIf="award.delivered_at_seconds">{{ numberTr(award.delivered_at_seconds, 0) }} sn</ng-container>
-              <ng-container *ngIf="!award.delivered_at_seconds && award.delivery_due_at_seconds">≈ {{ numberTr(award.delivery_due_at_seconds, 0) }} sn</ng-container>
+              <ng-container *ngIf="award.delivered_at_seconds">{{ simDurationShort(award.delivered_at_seconds) }}</ng-container>
+              <ng-container *ngIf="!award.delivered_at_seconds && award.delivery_due_at_seconds">≈ {{ simDurationShort(award.delivery_due_at_seconds) }}</ng-container>
               <ng-container *ngIf="!award.delivery_due_at_seconds">—</ng-container>
             </span>
             <strong>{{ award.landed_cost_tl ? (numberTr(award.landed_cost_tl, 0) + ' TL') : '—' }}</strong>
@@ -173,6 +181,12 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.text-link { color:#1d4ed8; font-weight:750; text-decoration:none; }',
     '.alert { padding:.9rem 1rem; color:#991b1b; background:#fee2e2; border:1px solid #fca5a5; border-radius:.7rem; margin-bottom:1rem; }.link-button { border:0; background:transparent; color:#991b1b; text-decoration:underline; cursor:pointer; }',
     '.empty-state,.loading { padding:2.5rem; color:#334155; text-align:center; background:#fff; border:1px dashed #64748b; border-radius:1rem; }',
+    '.tender-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; margin-bottom:1rem; }',
+    '.tender-steps .step { position:relative; display:grid; gap:.15rem; padding:.65rem .8rem .65rem 2.4rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:.7rem; }',
+    '.tender-steps .step span { position:absolute; left:.75rem; top:50%; transform:translateY(-50%); width:1.3rem; height:1.3rem; border-radius:50%; display:grid; place-items:center; background:#e2e8f0; color:#475569; font-size:.7rem; font-weight:800; }',
+    '.tender-steps .step strong { color:#111827; font-size:.85rem; }.tender-steps .step small { color:#64748b; font-size:.78rem; }',
+    '.tender-steps .step.done { background:#ecfdf5; border-color:#a7f3d0; }.tender-steps .step.done span { background:#047857; color:#fff; }',
+    '@media(max-width:900px){.tender-steps{grid-template-columns:1fr 1fr}}',
     '@media(max-width:1000px){.need-grid{grid-template-columns:1fr 1fr}.offer-row,.award-row{grid-template-columns:1fr 1fr}.offer-head,.award-head{display:none}.page-heading{align-items:flex-start; flex-direction:column}}',
   ],
 })
@@ -180,6 +194,7 @@ export class TenderDetailComponent {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   tender: TenderDetail | null = null;
   loading = true;
   error = '';
@@ -191,6 +206,7 @@ export class TenderDetailComponent {
   private touched: Record<number, boolean> = {};
   readonly Number = Number;
   readonly numberTr = numberTr;
+  readonly simDurationShort = simDurationShort;
   readonly decisionLabel = decisionLabel;
   readonly awardStatusLabel = awardStatusLabel;
 
@@ -265,6 +281,7 @@ export class TenderDetailComponent {
         next: (tender) => {
           this.touched[offer.participation_id] = false;
           delete this.acceptQty[offer.participation_id];
+          this.toast.show(`${offer.npc_name}: ${numberTr(quantity, 0)} kg kabul edildi`);
           this.apply(tender);
         },
         error: (error: unknown) => {
@@ -289,7 +306,10 @@ export class TenderDetailComponent {
       .finalizeTender(this.tender.id)
       .pipe(finalize(() => (this.finalizing = false)))
       .subscribe({
-        next: (tender) => this.apply(tender),
+        next: (tender) => {
+          this.toast.show(`İhale tamamlandı: ${tender.status === 'NO_AWARD' ? 'sonuçsuz' : 'teslimat planlandı'}`);
+          this.apply(tender);
+        },
         error: (error: unknown) => {
           this.finalizeError = apiErrorMessage(error, 'İhale tamamlanamadı.');
         },

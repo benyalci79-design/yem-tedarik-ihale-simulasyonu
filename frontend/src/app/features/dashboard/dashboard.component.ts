@@ -14,7 +14,8 @@ import {
   StockMetrics,
   TenderSummary,
 } from '../../core/models';
-import { numberTr, simCalendarText, simDurationShort, statusLabel } from '../../shared/display';import { LineChartComponent } from '../../shared/line-chart.component';
+import { numberTr, simCalendarText, simDateOnly, simDurationShort, statusLabel } from '../../shared/display';import { LineChartComponent } from '../../shared/line-chart.component';
+import { ToastService } from '../../shared/toast.service';
 
 const CHART_COLORS = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00'];
 const CHART_DASHES = ['', '8 5', '2 4', '12 4 2 4', '10 6', '4 3'];
@@ -52,6 +53,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
           </div>
           <div class="budget-side">
             <span class="budget-usage" [class.warn]="budgetUsage >= 80" [class.over]="budgetUsage >= 100">%{{ numberTr(budget.usage_percent, 0) }}</span>
+            <button type="button" class="over-action" *ngIf="budget.exceeded && !budgetEditing" (click)="startEditBudget()">Limiti artır</button>
             <button type="button" class="link-button" *ngIf="!budgetEditing" [disabled]="simulation?.is_running" (click)="startEditBudget()">Limiti düzenle</button>
           </div>
         </div>
@@ -60,8 +62,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
           <span>Kalan: {{ numberTr(budget.remaining_tl, 0) }} TL</span>
           <span class="over-text" *ngIf="budget.exceeded">Bütçe aşıldı</span>
         </div>
-        <div class="budget-edit" *ngIf="budgetEditing">
-          <input type="number" [(ngModel)]="budgetInput" min="1" step="1000" aria-label="Aylık bütçe limiti (TL)">
+        <div class="budget-edit" *ngIf="budgetEditing">          <input type="number" [(ngModel)]="budgetInput" min="1" step="1000" aria-label="Aylık bütçe limiti (TL)">
           <button type="button" class="button primary" [disabled]="savingBudget" (click)="saveBudget()">Kaydet</button>
           <button type="button" class="button ghost" [disabled]="savingBudget" (click)="cancelEditBudget()">Vazgeç</button>
           <span class="error" *ngIf="budgetError">{{ budgetError }}</span>
@@ -97,7 +98,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
       </div>
 
       <section class="flow-card"><div class="section-heading"><div><h2>Canlı süreç akışı</h2><p>{{ activityDescription }}</p></div><span class="live-indicator" [class.paused]="!state.is_running"><i></i>{{ state.is_running ? 'CANLI' : 'DURAKLATILDI' }}</span></div><div class="flow-steps"><div *ngFor="let step of flowSteps; let index = index" class="flow-step" [class.done]="index < flowStep" [class.current]="index === flowStep" [class.pending]="index > flowStep"><span class="step-dot">{{ index < flowStep ? '✓' : index + 1 }}</span><strong>{{ step }}</strong><span>{{ flowStepText(index) }}</span></div></div></section>
-      <section class="activity-layout"><div class="activity-card"><div class="section-heading"><div><h2>Son hareketler</h2><p>İhale durumları iki saniyede bir yenilenir.</p></div><a routerLink="/tenders" class="text-link">Tümünü gör →</a></div><div *ngIf="recentActivities.length; else noActivity" class="activity-list"><a *ngFor="let activity of recentActivities" class="activity-row" [routerLink]="['/tenders', activity.tender.id]"><span class="activity-icon" [class]="activity.tender.status.toLowerCase()">{{ activity.icon }}</span><span><strong>{{ activity.tender.product_name }} · {{ activity.tender.code }}</strong><small>{{ activity.label }} · {{ numberTr(activity.tender.opened_at_seconds, 1) }} sn'de açıldı</small></span><b>→</b></a></div><ng-template #noActivity><div class="activity-empty">{{ state.is_running ? 'Yeni ihale açmak için İhale Listesi ekranını kullanın.' : 'Simülasyonu üst bardan başlattığınızda süreç hareketleri burada görünecek.' }}</div></ng-template></div><div class="next-card"><span class="eyebrow">SİSTEMİN SIRADAKİ ADIMI</span><strong>{{ nextStep }}</strong><p>{{ nextStepDescription }}</p><a routerLink="/tenders" class="text-link">İhale listesine git →</a></div></section>
+      <section class="activity-layout"><div class="activity-card"><div class="section-heading"><div><h2>Son hareketler</h2><p>İhale durumları iki saniyede bir yenilenir.</p></div><a routerLink="/tenders" class="text-link">Tümünü gör →</a></div><div *ngIf="recentActivities.length; else noActivity" class="activity-list"><a *ngFor="let activity of recentActivities" class="activity-row" [routerLink]="['/tenders', activity.tender.id]"><span class="activity-icon" [class]="activity.tender.status.toLowerCase()">{{ activity.icon }}</span><span><strong>{{ activity.tender.product_name }} · {{ activity.tender.code }}</strong><small>{{ activity.label }} · {{ simDurationShort(activity.tender.opened_at_seconds) }} açılış</small></span><b>→</b></a></div><ng-template #noActivity><div class="activity-empty">{{ state.is_running ? 'Yeni ihale açmak için İhale Listesi ekranını kullanın.' : 'Simülasyonu üst bardan başlattığınızda süreç hareketleri burada görünecek.' }}</div></ng-template></div><div class="next-card"><span class="eyebrow">SİSTEMİN SIRADAKİ ADIMI</span><strong>{{ nextStep }}</strong><p>{{ nextStepDescription }}</p><a routerLink="/tenders" class="text-link">İhale listesine git →</a></div></section>
     </ng-container>
 
     <section class="section-heading stock-heading"><div><h2>Kritik stok görünümü</h2><p>Doluluk = (stok + yoldaki) / depo kapasitesi. 2 dakikanın altındaki kapsama vurgulanır.</p></div><a routerLink="/tenders" class="text-link">Tüm ihaleleri gör →</a></section>
@@ -109,6 +110,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
 export class DashboardComponent {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   simulation: SimulationState | null = null;
   products: Product[] = [];
   tenders: TenderSummary[] = [];
@@ -129,6 +131,7 @@ export class DashboardComponent {
   private speed = 1;
   readonly Number = Number;
   readonly numberTr = numberTr;
+  readonly simDurationShort = simDurationShort;
   readonly flowSteps = ['Simülasyon', 'Stok analizi', 'İhale açılışı', 'Değerlendirme', 'Teslimat'];
 
   constructor() {
@@ -220,6 +223,7 @@ export class DashboardComponent {
         next: (budget) => {
           this.budget = budget;
           this.budgetEditing = false;
+          this.toast.show('Bütçe limiti güncellendi');
         },
         error: (error: unknown) => {
           this.budgetError = apiErrorMessage(error, 'Bütçe güncellenemedi.');
@@ -228,7 +232,7 @@ export class DashboardComponent {
   }
 
   get chartLabels(): string[] {
-    return this.history.map((point) => simDurationShort(point.elapsed_seconds));
+    return this.history.map((point) => simDateOnly(point.elapsed_seconds));
   }
 
   get valueSeries(): ChartSeries[] {

@@ -52,3 +52,5 @@
 .budget-edit .error { color:#991b1b; font-weight:700; font-size:.85rem; }
 .hero-clock { font-size:1rem; font-weight:600; color:#cbd5e1; margin-left:.45rem; }
 
+.over-action { border:0; background:#b91c1c; color:#fff; border-radius:.5rem; padding:.4rem .6rem; font-weight:750; font-size:.8rem; cursor:pointer; }
+

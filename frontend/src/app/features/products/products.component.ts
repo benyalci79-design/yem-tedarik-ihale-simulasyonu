@@ -6,6 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Product } from '../../core/models';
 import { numberTr } from '../../shared/display';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-products',
@@ -54,7 +55,7 @@ import { numberTr } from '../../shared/display';
           </div>
           <div class="form-actions">
             <span class="form-error" *ngIf="formError[product.id]">{{ formError[product.id] }}</span>
-            <button class="button button-primary" type="submit" [disabled]="forms[product.id].invalid || saving[product.id]">Kaydet</button>
+            <button class="button button-primary" type="submit" [disabled]="forms[product.id].invalid || saving[product.id]">{{ saving[product.id] ? 'Kaydediliyor…' : 'Kaydet' }}</button>
           </div>
         </form>
       </article>
@@ -79,6 +80,7 @@ export class ProductsComponent {
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   products: Product[] = [];
   forms: Record<number, ReturnType<FormBuilder['group']>> = {};
   saving: Record<number, boolean> = {};
@@ -149,6 +151,7 @@ export class ProductsComponent {
       .subscribe({
         next: () => {
           this.saving[product.id] = false;
+          this.toast.show(`${product.name} ayarları kaydedildi`);
           this.load();
         },
         error: (error: unknown) => {

@@ -30,6 +30,10 @@ export function simDurationShort(totalSeconds: string | number): string {
   return simCalendarText(totalSeconds).combined;
 }
 
+export function simDateOnly(totalSeconds: string | number): string {
+  return simCalendarText(totalSeconds).date;
+}
+
 export function numberTr(value: string | number, digits = 2): string {
   const parsed = typeof value === 'number' ? value : Number(value);
   return new Intl.NumberFormat('tr-TR', {
