@@ -1,7 +1,11 @@
 export interface SimulationState {
   is_running: boolean;
   elapsed_seconds: string;
+  elapsed_display: string;
+  elapsed_short: string;
   speed: string;
+  season_progress: string;
+  season_label: string;
   last_error: string | null;
 }
 
@@ -23,6 +27,9 @@ export interface Product {
   capacity_kg: string;
   avg_cost_per_kg: string;
   last_purchase_unit_price: string;
+  loss_percent: string;
+  season_amplitude: string;
+  season_factor: string;
   incoming_kg: string;
   free_capacity_kg: string;
   stock_value_tl: string;
@@ -60,6 +67,7 @@ export interface TenderOffer {
   accepted_quantity_kg?: string;
   delivery_minutes?: number;
   freight_included?: boolean;
+  season_factor?: string;
   submitted_at_seconds?: string;
   decision?: string;
   decision_reason?: string | null;
@@ -79,6 +87,8 @@ export interface TenderAward {
   carrier_name: string | null;
   carrier_price_per_ton: string | null;
   status: string;
+  loss_kg: string;
+  accepted_kg: string;
   accepted_at_seconds: string;
   carrier_assigned_at_seconds: string | null;
   delivery_due_at_seconds: string | null;
@@ -107,6 +117,8 @@ export interface TenderSummary {
   product_capacity_kg: string;
   product_avg_cost_per_kg: string;
   product_last_purchase_unit_price: string;
+  product_loss_percent: string;
+  product_season_factor: string;
   result_reason: string | null;
   awards: TenderAward[];
 }
@@ -117,6 +129,7 @@ export interface TenderDetail extends TenderSummary {
   delivery_due_at_seconds: string | null;
   delivered_at_seconds: string | null;
   delivery_status: string | null;
+  budget_remaining_tl: string;
 }
 
 export interface Carrier {
@@ -169,6 +182,8 @@ export interface StockMetrics {
   total_stock_kg: string;
   total_value_tl: string;
   total_avg_cost_per_kg: string;
+  total_loss_kg: string;
+  total_loss_tl: string;
 }
 
 export interface HistoryPoint {
@@ -190,6 +205,39 @@ export interface PurchaseStatsItem {
   avg_unit_price: string | null;
 }
 
+export interface BudgetState {
+  monthly_limit_tl: string;
+  spent_tl: string;
+  remaining_tl: string;
+  usage_percent: string;
+  period_index: number;
+  period_start_seconds: string;
+  period_end_seconds: string;
+  exceeded: boolean;
+}
+
+export interface SupplierScore {
+  supplier_id: number;
+  code: string;
+  name: string;
+  invitations: number;
+  offers: number;
+  awards: number;
+  response_rate: string;
+  win_rate: string;
+  avg_price_deviation_pct: string;
+  avg_delivery_minutes: string;
+  score: string;
+}
+
+export interface AppNotification {
+  id: string;
+  severity: 'danger' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  link: string;
+}
+
 export interface ChartSeries {
   id: string;
   label: string;
@@ -198,3 +246,4 @@ export interface ChartSeries {
   marker: 'circle' | 'square' | 'triangle';
   values: number[];
 }
+

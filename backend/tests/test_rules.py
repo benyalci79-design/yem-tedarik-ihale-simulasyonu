@@ -2,9 +2,11 @@ from decimal import Decimal
 
 import pytest
 
+from app.calendar import format_duration, format_short, split_duration
 from app.routers.metrics import _last_known_avg
 from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
+    apply_loss,
     can_deliver_award,
     check_capacity,
     consume_stock,
@@ -16,6 +18,9 @@ from app.simulation.rules import (
     price_per_ton_to_per_kg,
     remaining_need_kg,
     round_up_ton,
+    season_factor,
+    season_label,
+    season_phase,
     tender_quantity_ton,
     weighted_average_cost,
 )
@@ -141,6 +146,53 @@ def test_delivery_due_with_carrier_waits_for_assignment():
 def test_total_unit_price_is_preserved_when_stock_is_zero():
     assert _last_known_avg([Decimal("8"), Decimal("10")]) == Decimal("9.000000")
     assert _last_known_avg([]) == Decimal("0")
+
+
+def test_apply_loss_reduces_accepted_quantity():
+    assert apply_loss(Decimal("1000"), Decimal("1.50")) == Decimal("985.000000")
+    assert apply_loss(Decimal("1000"), Decimal("0")) == Decimal("1000")
+    assert apply_loss(Decimal("1200.500"), Decimal("0.50")) == Decimal("1194.497500")
+
+
+def test_season_factor_follows_progress():
+    assert season_factor(Decimal("0"), Decimal("10"), 0.0) == Decimal("1.000000")
+    assert season_factor(Decimal("0.25"), Decimal("10"), 0.0) == Decimal("1.100000")
+    assert season_factor(Decimal("0.75"), Decimal("10"), 0.0) == Decimal("0.900000")
+    assert season_factor(Decimal("0.25"), Decimal("0"), 0.0) == Decimal("1")
+
+
+def test_season_label_cycles():
+    assert season_label(Decimal("0.10")) == "İlkbahar"
+    assert season_label(Decimal("0.35")) == "Yaz"
+    assert season_label(Decimal("0.60")) == "Sonbahar"
+    assert season_label(Decimal("0.90")) == "Kış"
+
+
+def test_season_phase_spreads_products():
+    import math
+
+    assert season_phase(1) == pytest.approx(2 * math.pi / 3)
+    assert season_phase(2) == pytest.approx(4 * math.pi / 3)
+    assert season_phase(3) == pytest.approx(0.0)
+
+
+def test_calendar_splits_duration():
+    parts = split_duration(Decimal("10800"))
+    assert parts["years"] == 1
+    assert parts["months"] == 0
+    assert parts["days"] == 0
+
+    parts = split_duration(Decimal("1750"))
+    assert parts["years"] == 0
+    assert parts["months"] == 1
+    assert parts["days"] == 28
+    assert format_short(Decimal("1750")) == "1 ay 28 gün 08:00"
+
+
+def test_calendar_formats_short_and_full():
+    assert format_duration(Decimal("0")) == "0 gün 00:00:00"
+    assert format_duration(Decimal("45")) == "1 gün 12:00:00"
+    assert format_short(Decimal("45")) == "1 gün 12:00"
 
 
 def test_award_delivery_is_idempotent():

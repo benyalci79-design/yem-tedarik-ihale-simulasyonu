@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.budget import budget_state
+from app.season import current_progress
 from app.db import SessionLocal, get_db
 from app.errors import ApiError
 from app.inventory import free_capacity
@@ -19,6 +21,8 @@ from app.simulation.rules import (
     max_acceptable_kg,
     price_per_ton_to_per_kg,
     remaining_need_kg,
+    season_factor,
+    season_phase,
 )
 
 router = APIRouter(prefix="/api/v1/tenders", tags=["tenders"])
@@ -88,6 +92,8 @@ def _serialize_award(award: TenderAward, elapsed: Decimal) -> dict:
             str(award.carrier_price_per_ton) if award.carrier_price_per_ton is not None else None
         ),
         "status": award.status,
+        "loss_kg": str(award.loss_kg),
+        "accepted_kg": str(Decimal(award.quantity_kg) - Decimal(award.loss_kg)),
         "accepted_at_seconds": str(award.accepted_at_seconds),
         "carrier_assigned_at_seconds": (
             str(award.carrier_assigned_at_seconds)
@@ -109,6 +115,12 @@ def _base_tender(db: Session, tender: Tender, elapsed: Decimal) -> dict:
     awards = list(tender.awards)
     accepted_total = sum((Decimal(award.quantity_kg) for award in awards), ZERO)
     remaining = remaining_need_kg(Decimal(tender.quantity_ton), accepted_total)
+    product = tender.product
+    season = season_factor(
+        current_progress(db),
+        Decimal(product.season_amplitude),
+        season_phase(product.id),
+    )
     return {
         "id": tender.id,
         "code": tender.code,
@@ -129,6 +141,8 @@ def _base_tender(db: Session, tender: Tender, elapsed: Decimal) -> dict:
         "product_capacity_kg": str(tender.product.capacity_kg),
         "product_avg_cost_per_kg": str(tender.product.avg_cost_per_kg),
         "product_last_purchase_unit_price": str(tender.product.last_purchase_unit_price),
+        "product_loss_percent": str(product.loss_percent),
+        "product_season_factor": str(season),
         "result_reason": tender.result_reason,
         "awards": [_serialize_award(award, elapsed) for award in awards],
     }
@@ -176,6 +190,7 @@ def _offer_details(
                 "accepted_quantity_kg": str(participation.accepted_quantity_kg),
                 "delivery_minutes": participation.delivery_minutes,
                 "freight_included": participation.freight_included,
+                "season_factor": str(participation.season_factor),
                 "submitted_at_seconds": (
                     str(participation.submitted_at_seconds)
                     if participation.submitted_at_seconds is not None
@@ -218,6 +233,7 @@ def serialize_detail(db: Session, tender: Tender) -> dict:
         if tender.status == "NO_AWARD"
         else None
     )
+    data["budget_remaining_tl"] = budget_state(db)["remaining_tl"]
     return data
 
 
@@ -398,6 +414,20 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
                 422,
                 "QUANTITY_EXCEEDS_OFFER",
                 f"NPC yalnızca {_kg(offered)} kg teklif etti.",
+            )
+
+        if participation.freight_included:
+            planned_cost = landed_cost_tl(quantity, Decimal(participation.unit_price), None)
+        else:
+            planned_cost = (
+                quantity / TON_KG * Decimal(participation.unit_price)
+            ).quantize(Decimal("0.01"))
+        remaining_budget = Decimal(budget_state(db)["remaining_tl"])
+        if planned_cost > remaining_budget:
+            raise ApiError(
+                422,
+                "BUDGET_EXCEEDED",
+                f"Bütçe yetersiz. Kalan: {remaining_budget:.2f} TL, bu alım: {planned_cost:.2f} TL.",
             )
 
         now = Decimal(state.elapsed_seconds) if state is not None else ZERO

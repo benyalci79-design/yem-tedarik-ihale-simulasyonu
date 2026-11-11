@@ -6,6 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Product } from '../../core/models';
 import { numberTr } from '../../shared/display';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-products',
@@ -43,15 +44,18 @@ import { numberTr } from '../../shared/display';
             <label>Teklif penceresi (sn)<input type="number" formControlName="offer_window_seconds" min="10" max="600" step="1"></label>
             <label>Depo kapasitesi (kg)<input type="number" formControlName="capacity_kg" min="1" step="0.001"></label>
             <label>Ortalama maliyet (TL/kg)<input type="number" formControlName="avg_cost_per_kg" min="0" step="0.000001"></label>
+            <label>Fire oranı (%)<input type="number" formControlName="loss_percent" min="0" max="10" step="0.01"></label>
+            <label>Mevsim genliği (%)<input type="number" formControlName="season_amplitude" min="0" max="50" step="0.01"></label>
           </div>
           <div class="current-values">
             <span>Kapsama: <strong>{{ numberTr(product.coverage_minutes, 1) }} dk</strong></span>
             <span>Önerilen ihale: <strong>{{ numberTr(product.suggested_quantity_ton, 3) }} ton</strong></span>
             <span>Son alım: <strong>{{ numberTr(product.last_purchase_unit_price, 2) }} TL/kg</strong></span>
+            <span>Sezon: <strong>×{{ numberTr(product.season_factor, 2) }}</strong></span>
           </div>
           <div class="form-actions">
             <span class="form-error" *ngIf="formError[product.id]">{{ formError[product.id] }}</span>
-            <button class="button button-primary" type="submit" [disabled]="forms[product.id].invalid || saving[product.id]">Kaydet</button>
+            <button class="button button-primary" type="submit" [disabled]="forms[product.id].invalid || saving[product.id]">{{ saving[product.id] ? 'Kaydediliyor…' : 'Kaydet' }}</button>
           </div>
         </form>
       </article>
@@ -76,6 +80,7 @@ export class ProductsComponent {
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   products: Product[] = [];
   forms: Record<number, ReturnType<FormBuilder['group']>> = {};
   saving: Record<number, boolean> = {};
@@ -113,6 +118,8 @@ export class ProductsComponent {
             offer_window_seconds: [product.offer_window_seconds, [Validators.required, Validators.min(10), Validators.max(600)]],
             capacity_kg: [Number(product.capacity_kg), [Validators.required, Validators.min(1)]],
             avg_cost_per_kg: [Number(product.avg_cost_per_kg), [Validators.required, Validators.min(0)]],
+            loss_percent: [Number(product.loss_percent), [Validators.required, Validators.min(0), Validators.max(10)]],
+            season_amplitude: [Number(product.season_amplitude), [Validators.required, Validators.min(0), Validators.max(50)]],
           });
         }
       });
@@ -144,6 +151,7 @@ export class ProductsComponent {
       .subscribe({
         next: () => {
           this.saving[product.id] = false;
+          this.toast.show(`${product.name} ayarları kaydedildi`);
           this.load();
         },
         error: (error: unknown) => {

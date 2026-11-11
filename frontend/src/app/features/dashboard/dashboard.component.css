@@ -28,3 +28,29 @@
 @media(max-width:640px){.cost-grid{grid-template-columns:1fr}}
 .last-buy { color:#64748b; font-size:.76rem; }
 .cost-card.total .last-buy { color:#cbd5e1; }
+.season-chip { color:#475569; font-size:.8rem; }
+
+.budget-card { padding:1.1rem 1.2rem; margin-bottom:1.4rem; background:#fff; border:1px solid #cbd5e1; border-radius:1rem; }
+.budget-head { display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; margin-bottom:.6rem; }
+.budget-head strong { display:block; margin-top:.25rem; font-size:1.6rem; color:#111827; }
+.budget-head strong small { font-size:.9rem; color:#64748b; font-weight:600; }
+.budget-side { display:flex; align-items:center; gap:.8rem; }
+.budget-usage { font-weight:850; font-size:1.05rem; color:#047857; }
+.budget-usage.warn { color:#b45309; }
+.budget-usage.over { color:#b91c1c; }
+.budget-bar { height:.6rem; border-radius:999px; background:#e2e8f0; overflow:hidden; }
+.budget-bar span { display:block; height:100%; background:linear-gradient(90deg,#10b981,#047857); transition:width .3s ease; }
+.budget-bar.warn span { background:linear-gradient(90deg,#f59e0b,#b45309); }
+.budget-bar.over span { background:linear-gradient(90deg,#f43f5e,#b91c1c); }
+.budget-foot { display:flex; justify-content:space-between; margin-top:.45rem; color:#475569; font-size:.85rem; }
+.over-text { color:#b91c1c; font-weight:800; }
+.budget-edit { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-top:.8rem; }
+.budget-edit input { border:1px solid #64748b; border-radius:.5rem; padding:.55rem; min-width:12rem; }
+.budget-edit .button { border:0; border-radius:.55rem; padding:.55rem .9rem; font-weight:750; cursor:pointer; }
+.budget-edit .button.primary { background:#1d4ed8; color:#fff; }
+.budget-edit .button.ghost { background:#e2e8f0; color:#1e293b; }
+.budget-edit .error { color:#991b1b; font-weight:700; font-size:.85rem; }
+.hero-clock { font-size:1rem; font-weight:600; color:#cbd5e1; margin-left:.45rem; }
+
+.over-action { border:0; background:#b91c1c; color:#fff; border-radius:.5rem; padding:.4rem .6rem; font-weight:750; font-size:.8rem; cursor:pointer; }
+

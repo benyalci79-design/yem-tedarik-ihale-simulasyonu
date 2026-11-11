@@ -6,6 +6,7 @@ THOUSANDTH_TON = Decimal("0.001")
 SIX_PLACES = Decimal("0.000001")
 TWO_PLACES = Decimal("0.01")
 MILLISECOND = Decimal("0.001")
+SEASON_PERIOD_SECONDS = Decimal("10800")
 
 
 def consumed_kg(consumption_kg_per_min: Decimal, elapsed_seconds: Decimal) -> Decimal:
@@ -123,3 +124,46 @@ def can_deliver_award(status: str, delivered_at_seconds: Decimal | None) -> bool
     award için stok ve maliyet ikinci kez eklenmez (idempotent teslimat).
     """
     return status == "IN_TRANSIT" and delivered_at_seconds is None
+
+
+def apply_loss(quantity_kg: Decimal, loss_percent: Decimal) -> Decimal:
+    """Mal kabulde fire düşülmüş net miktar (kg)."""
+    if loss_percent <= ZERO:
+        return quantity_kg
+    safe_percent = min(loss_percent, Decimal("100"))
+    return (quantity_kg * (Decimal("100") - safe_percent) / Decimal("100")).quantize(
+        SIX_PLACES, rounding=ROUND_HALF_UP
+    )
+
+
+def season_phase(product_id: int) -> float:
+    import math
+
+    return (product_id % 3) * (2 * math.pi / 3)
+
+
+def season_label(progress: Decimal) -> str:
+    """0..1 mevsim ilerlemesini Türkçe mevsim adına çevirir."""
+    value = float(progress) % 1.0
+    if value < 0.25:
+        return "İlkbahar"
+    if value < 0.5:
+        return "Yaz"
+    if value < 0.75:
+        return "Sonbahar"
+    return "Kış"
+
+
+def season_factor(
+    progress: Decimal,
+    amplitude_percent: Decimal,
+    phase_radians: float,
+) -> Decimal:
+    """Mevsimsel fiyat katsayısı: 1 + genlik * sin(2π ilerleme + faz)."""
+    import math
+
+    if amplitude_percent <= ZERO:
+        return Decimal("1")
+    angle = 2 * math.pi * float(progress) + phase_radians
+    factor = Decimal("1") + (amplitude_percent / Decimal("100")) * Decimal(str(math.sin(angle)))
+    return factor.quantize(SIX_PLACES, rounding=ROUND_HALF_UP)

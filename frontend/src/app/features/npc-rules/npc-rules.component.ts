@@ -6,6 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { NpcRule } from '../../core/models';
 import { numberTr } from '../../shared/display';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-npc-rules',
@@ -20,13 +21,11 @@ import { numberTr } from '../../shared/display';
     <div *ngIf="error" class="alert">{{ error }} <button class="link-button" (click)="load()">Yeniden dene</button></div>
 
     <div class="filters">
-      <label>Ürün
-        <select [value]="filterProductId ?? ''" (change)="onFilter($event)" aria-label="Ürün filtresi">
-          <option value="">Tüm ürünler</option>
-          <option *ngFor="let product of productNames" [value]="product.id">{{ product.name }}</option>
-        </select>
-      </label>
-      <span class="count">{{ filteredRules.length }} kural · {{ productNames.length }} ürün · 10 NPC</span>
+      <div class="tabs" role="tablist" aria-label="Ürün filtresi">
+        <button type="button" role="tab" [attr.aria-selected]="filterProductId === null" [class.active]="filterProductId === null" (click)="filterProductId = null">Tümü <span>{{ rules.length }}</span></button>
+        <button type="button" role="tab" *ngFor="let product of productNames" [attr.aria-selected]="filterProductId === product.id" [class.active]="filterProductId === product.id" (click)="filterProductId = product.id">{{ product.name }} <span>{{ countFor(product.id) }}</span></button>
+      </div>
+      <span class="count">{{ filteredRules.length }} kural</span>
     </div>
 
     <div *ngIf="loading && !rules.length" class="loading">NPC kuralları hazırlanıyor…</div>
@@ -42,7 +41,7 @@ import { numberTr } from '../../shared/display';
           <div class="range-fields small"><input type="number" formControlName="min_delivery_minutes" min="1" max="60"><span>–</span><input type="number" formControlName="max_delivery_minutes" min="1" max="60"></div>
           <label class="freight"><input type="checkbox" formControlName="freight_included"><b>{{ forms[rule.id].get('freight_included')?.value ? 'Dahil' : 'Hariç' }}</b></label>
           <div class="range-fields"><input type="number" formControlName="min_available_kg" min="1" step="1"><span>–</span><input type="number" formControlName="max_available_kg" min="1" step="1"></div>
-          <button class="button" type="submit" [disabled]="forms[rule.id].invalid || saving[rule.id]">Kaydet</button>
+          <button class="button" type="submit" [disabled]="forms[rule.id].invalid || saving[rule.id]">{{ saving[rule.id] ? 'Kaydediliyor…' : 'Kaydet' }}</button>
         </form>
         <span class="row-error" *ngIf="formError[rule.id]">{{ formError[rule.id] }}</span>
       </div>
@@ -53,11 +52,16 @@ import { numberTr } from '../../shared/display';
     '.page-heading,.table-head,.table-row { display:grid; grid-template-columns:1.7fr .8fr 1.3fr 1.9fr 1.1fr .9fr 1.7fr 80px; gap:.9rem; align-items:center; }',
     '.page-heading { display:flex; justify-content:space-between; margin-bottom:1.6rem; }.eyebrow { color:#1d4ed8; font-size:.78rem; font-weight:800; letter-spacing:.08em; }.page-heading h1 { margin:.3rem 0; color:#111827; font-size:2.4rem; }.lede { color:#4b5563; }',
     '.info-chip { color:#1e3a8a; background:#dbeafe; padding:.55rem .75rem; border-radius:999px; font-weight:750; height:fit-content; }',
-    '.filters { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.9rem 1rem; margin-bottom:1rem; background:#fff; border:1px solid #cbd5e1; border-radius:.8rem; }',
-    '.filters label { display:grid; gap:.35rem; color:#374151; font-weight:750; }.filters select { min-width:14rem; border:1px solid #64748b; border-radius:.45rem; padding:.55rem; background:#fff; color:#111827; }.count { color:#475569; font-size:.88rem; }',
-    '.rules-table { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; overflow:hidden; }',
-    '.table-head { color:#374151; background:#f1f5f9; padding:1rem; font-weight:800; font-size:.82rem; }',
-    '.table-row { position:relative; padding:1rem; border-top:1px solid #e5e7eb; }.table-row strong,.table-row small { display:block; }.table-row small { color:#4b5563; margin-top:.25rem; }',
+    '.filters { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem .8rem; margin-bottom:1rem; background:#fff; border:1px solid #cbd5e1; border-radius:.8rem; }',
+    '.tabs { display:flex; gap:.3rem; flex-wrap:wrap; }',
+    '.tabs button { border:1px solid #cbd5e1; background:#f8fafc; color:#1e293b; border-radius:999px; padding:.45rem .75rem; font-weight:750; font-size:.85rem; cursor:pointer; }',
+    '.tabs button.active { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }',
+    '.tabs button span { opacity:.7; font-size:.78rem; margin-left:.2rem; }',
+    '.count { color:#475569; font-size:.85rem; white-space:nowrap; }',
+    '.rules-table { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; overflow:auto; max-height:calc(100vh - 250px); }',
+    '.table-head { color:#374151; background:#f1f5f9; padding:.85rem 1rem; font-weight:800; font-size:.82rem; position:sticky; top:0; z-index:2; }',
+    '.table-row { position:relative; padding:.75rem 1rem; border-top:1px solid #e5e7eb; }.table-row:nth-child(even) { background:#f8fafc; } .table-row:hover { background:#eff6ff; }',
+    '.table-row strong, .table-row small { display:block; }.table-row small { color:#4b5563; margin-top:.2rem; }',
     '.rule-form { display:contents; }.rule-form label { color:#374151; }.rule-form input { min-width:0; border:1px solid #64748b; border-radius:.45rem; padding:.5rem; color:#111827; background:#fff; }.rule-form input:focus { outline:3px solid #bfdbfe; border-color:#1d4ed8; }',
     '.inline-field { display:flex; align-items:center; gap:.45rem; }.inline-field input { width:5rem; }.inline-field span { color:#374151; font-weight:700; }',
     '.range-fields { display:flex; align-items:center; gap:.3rem; }.range-fields input { width:5.6rem; }.range-fields.small input { width:3.8rem; }',
@@ -73,6 +77,7 @@ export class NpcRulesComponent {
   private readonly api = inject(ApiService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   rules: NpcRule[] = [];
   products: { id: number; name: string }[] = [];
   forms: Record<number, ReturnType<FormBuilder['group']>> = {};
@@ -97,9 +102,8 @@ export class NpcRulesComponent {
     return this.filterProductId === null ? this.rules : this.rules.filter((rule) => rule.product_id === this.filterProductId);
   }
 
-  onFilter(event: Event): void {
-    const value = (event.target as HTMLSelectElement).value;
-    this.filterProductId = value ? Number(value) : null;
+  countFor(productId: number): number {
+    return this.rules.filter((rule) => rule.product_id === productId).length;
   }
 
   load(): void {
@@ -159,6 +163,7 @@ export class NpcRulesComponent {
       .subscribe({
         next: () => {
           this.saving[rule.id] = false;
+          this.toast.show(`${rule.npc_name} kuralı kaydedildi`);
           this.load();
         },
         error: (error: unknown) => {

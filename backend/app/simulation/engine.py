@@ -18,7 +18,15 @@ from app.models import (
 )
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
 from app.seed import restore_defaults
-from app.simulation.rules import can_deliver_award, consume_stock, weighted_average_cost
+from app.simulation.rules import (
+    SEASON_PERIOD_SECONDS,
+    apply_loss,
+    can_deliver_award,
+    consume_stock,
+    season_factor,
+    season_phase,
+    weighted_average_cost,
+)
 from app.simulation.timeline import TimelineEvent, ordered_events
 
 ACTIVE_STATUSES = ("OPEN", "EVALUATION", "AWARDED")
@@ -114,6 +122,15 @@ class SimulationEngine:
                 state.last_error = None
                 return state
 
+    def set_season_progress(self, progress: Decimal) -> SimulationState:
+        with self._lock, self.session_factory.begin() as db:
+            state = db.get(SimulationState, 1, with_for_update=True)
+            if state is None:
+                state = SimulationState(id=1, is_running=False, elapsed_seconds=ZERO)
+                db.add(state)
+            state.season_progress = progress
+            return state
+
     def reset(self) -> SimulationState:
         """Simülasyonu başlangıç durumuna döndürür.
 
@@ -138,6 +155,7 @@ class SimulationEngine:
                 db.add(state)
             state.is_running = False
             state.elapsed_seconds = baseline if baseline is not None else ZERO
+            state.season_progress = ZERO
             state.last_tick_at = None
             state.last_error = None
             state.speed_multiplier = Decimal("1.00")
@@ -171,6 +189,9 @@ class SimulationEngine:
             state.elapsed_seconds = target
             state.last_tick_at = now
             state.last_error = None
+            state.season_progress = (
+                (Decimal(state.season_progress) + delta / SEASON_PERIOD_SECONDS) % Decimal("1")
+            ).quantize(Decimal("0.0001"))
             self._write_snapshots(db, target)
             db.commit()
             return state
@@ -271,15 +292,24 @@ class SimulationEngine:
             or Decimal(participation.response_at_seconds) >= Decimal(tender.offer_closes_at_seconds)
         ):
             return
+        product = tender.product
+        state = db.get(SimulationState, 1)
+        progress = Decimal(state.season_progress) if state is not None else ZERO
+        season = season_factor(
+            progress,
+            Decimal(product.season_amplitude),
+            season_phase(product.id),
+        )
         offer = generate_offer(
-            Decimal(participation.min_price),
-            Decimal(participation.max_price),
+            (Decimal(participation.min_price) * season).quantize(Decimal("0.01")),
+            (Decimal(participation.max_price) * season).quantize(Decimal("0.01")),
             participation.min_delivery_minutes,
             participation.max_delivery_minutes,
             Decimal(participation.min_available_kg),
             Decimal(participation.max_available_kg),
             self.rng,
         )
+        participation.season_factor = season
         participation.has_offer = True
         participation.unit_price = offer.unit_price
         participation.delivery_minutes = offer.delivery_minutes
@@ -300,14 +330,16 @@ class SimulationEngine:
 
         stock_before = Decimal(product.current_stock_kg)
         quantity = Decimal(award.quantity_kg)
+        accepted = apply_loss(quantity, Decimal(product.loss_percent))
         landed_cost = Decimal(award.landed_cost_tl or ZERO)
-        product.current_stock_kg = stock_before + quantity
+        product.current_stock_kg = stock_before + accepted
         product.avg_cost_per_kg = weighted_average_cost(
             stock_before,
             Decimal(product.avg_cost_per_kg),
-            quantity,
+            accepted,
             landed_cost,
         )
+        award.loss_kg = quantity - accepted
         if quantity > ZERO:
             product.last_purchase_unit_price = (
                 Decimal(award.unit_price_per_ton) / Decimal("1000")

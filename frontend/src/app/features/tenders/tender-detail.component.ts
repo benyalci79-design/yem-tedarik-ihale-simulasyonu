@@ -5,8 +5,9 @@ import { catchError, EMPTY, finalize, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { TenderDetail, TenderOffer } from '../../core/models';
-import { awardStatusLabel, decisionLabel, numberTr } from '../../shared/display';
+import { awardStatusLabel, decisionLabel, numberTr, simDurationShort } from '../../shared/display';
 import { StatusBadgeComponent } from '../../shared/status-badge.component';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-tender-detail',
@@ -26,6 +27,13 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
         <app-status-badge [status]="item.status"></app-status-badge>
       </section>
 
+      <section class="tender-steps" aria-label="İhale zaman çizelgesi">
+        <div class="step done"><span>1</span><strong>Açılış</strong><small>{{ simDurationShort(item.opened_at_seconds) }}</small></div>
+        <div class="step" [class.done]="item.status !== 'OPEN'"><span>2</span><strong>Teklif kapanışı</strong><small>{{ simDurationShort(item.offer_closes_at_seconds) }}</small></div>
+        <div class="step" [class.done]="item.status === 'AWARDED' || item.status === 'DELIVERED' || item.status === 'NO_AWARD'"><span>3</span><strong>Karar</strong><small>{{ item.awarded_at_seconds ? simDurationShort(item.awarded_at_seconds) : 'Bekliyor' }}</small></div>
+        <div class="step" [class.done]="item.status === 'DELIVERED'"><span>4</span><strong>Teslimat</strong><small>{{ item.delivered_at_seconds ? simDurationShort(item.delivered_at_seconds) : 'Bekliyor' }}</small></div>
+      </section>
+
       <section class="stock-strip" aria-label="Ürün stok ve maliyet özeti">
         <span class="strip-title">Depo</span>
         <span><b>{{ numberTr(item.product_stock_kg, 0) }}</b> / {{ numberTr(item.product_capacity_kg, 0) }} kg</span>
@@ -37,6 +45,12 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
         <span class="buy">Son alım <b>{{ numberTr(item.product_last_purchase_unit_price, 2) }} TL/kg</b></span>
         <span class="sep">·</span>
         <span>Ortalama <b>{{ numberTr(item.product_avg_cost_per_kg, 2) }} TL/kg</b></span>
+        <span class="sep">·</span>
+        <span>Sezon <b>×{{ numberTr(item.product_season_factor, 2) }}</b></span>
+        <span class="sep">·</span>
+        <span>Fire <b>%{{ numberTr(item.product_loss_percent, 2) }}</b></span>
+        <span class="sep">·</span>
+        <span [class.over]="Number(item.budget_remaining_tl) <= 0">Bütçe kalan <b>{{ numberTr(item.budget_remaining_tl, 0) }} TL</b></span>
       </section>
 
       <section class="need-grid">
@@ -79,6 +93,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
                 {{ numberTr(offer.unit_price_per_kg ?? 0, 2) }} TL/kg
                 <span class="trend up" *ngIf="isCheaper(offer)" title="Son alım fiyatından ucuz">▲</span>
                 <span class="trend down" *ngIf="isPricier(offer)" title="Son alım fiyatından pahalı">▼</span>
+                <span class="season" *ngIf="offer.season_factor">· sezon ×{{ numberTr(offer.season_factor, 2) }}</span>
               </small>
             </div>
             <span *ngIf="!offer.unit_price" class="muted">—</span>
@@ -112,7 +127,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
           <div class="award-row award-head"><span>NPC</span><span>Miktar</span><span>Fiyat</span><span>Nakliye</span><span>Durum</span><span>Teslim</span><span>Toplam maliyet</span></div>
           <div class="award-row" *ngFor="let award of item.awards">
             <strong>{{ award.npc_name }}</strong>
-            <span>{{ numberTr(award.quantity_kg, 0) }} kg</span>
+            <span>{{ numberTr(award.quantity_kg, 0) }} kg<small *ngIf="Number(award.loss_kg) > 0">fire {{ numberTr(award.loss_kg, 0) }} kg</small></span>
             <span>{{ numberTr(award.unit_price_per_ton, 0) }} TL/ton<small>{{ numberTr(award.unit_price_per_kg, 2) }} TL/kg</small></span>
             <span>
               <ng-container *ngIf="award.freight_included">Dahil</ng-container>
@@ -123,8 +138,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
             </span>
             <span class="award-status {{ award.status.toLowerCase() }}">{{ awardStatusLabel(award.status) }}</span>
             <span>
-              <ng-container *ngIf="award.delivered_at_seconds">{{ numberTr(award.delivered_at_seconds, 0) }} sn</ng-container>
-              <ng-container *ngIf="!award.delivered_at_seconds && award.delivery_due_at_seconds">≈ {{ numberTr(award.delivery_due_at_seconds, 0) }} sn</ng-container>
+              <ng-container *ngIf="award.delivered_at_seconds">{{ simDurationShort(award.delivered_at_seconds) }}</ng-container>
+              <ng-container *ngIf="!award.delivered_at_seconds && award.delivery_due_at_seconds">≈ {{ simDurationShort(award.delivery_due_at_seconds) }}</ng-container>
               <ng-container *ngIf="!award.delivery_due_at_seconds">—</ng-container>
             </span>
             <strong>{{ award.landed_cost_tl ? (numberTr(award.landed_cost_tl, 0) + ' TL') : '—' }}</strong>
@@ -143,7 +158,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.eyebrow { color:#1d4ed8; font-size:.78rem; font-weight:800; letter-spacing:.08em; }.page-heading h1 { margin:.3rem 0; color:#111827; font-size:2.2rem; }.lede { color:#4b5563; }',
     '.need-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; margin-bottom:1.2rem; }',
     '.stock-strip { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; padding:.55rem .85rem; margin-bottom:.9rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:.65rem; color:#334155; font-size:.85rem; }',
-    '.stock-strip b { color:#111827; font-variant-numeric:tabular-nums; }.stock-strip .sep { color:#94a3b8; }.stock-strip .strip-title { font-weight:800; color:#1d4ed8; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }.stock-strip .buy b { color:#1d4ed8; }',    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
+    '.stock-strip b { color:#111827; font-variant-numeric:tabular-nums; }.stock-strip .sep { color:#94a3b8; }.stock-strip .strip-title { font-weight:800; color:#1d4ed8; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }.stock-strip .buy b { color:#1d4ed8; }.stock-strip .over b { color:#b91c1c; }',    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
     '.reason { padding:.8rem 1rem; background:#f1f5f9; border-left:4px solid #1d4ed8; border-radius:.5rem; color:#172033; }',
     '.card { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; padding:1.2rem; margin-bottom:1.2rem; }',
     '.card-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:.8rem; }.card-head h2 { margin:0; color:#111827; }.live { color:#047857; font-weight:800; font-size:.8rem; letter-spacing:.06em; }',
@@ -155,7 +170,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.offer-row { display:grid; grid-template-columns:1.4fr 1fr 1fr .7fr .7fr .9fr 1.4fr .9fr; gap:.7rem; align-items:center; padding:.7rem .5rem; border-bottom:1px solid #e5e7eb; }',
     '.offer-head,.award-head { color:#374151; font-size:.8rem; font-weight:800; background:#f1f5f9; border-radius:.4rem; }',
     '.offer-row small,.award-row small { display:block; color:#64748b; margin-top:.15rem; }',
-    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }.trend { font-size:.9em; font-weight:900; }.trend.up { color:#047857; }.trend.down { color:#b91c1c; }',
+    '.muted-row { opacity:.7; }.muted { color:#64748b; }.price strong { display:block; }.season { color:#64748b; font-weight:600; }.trend { font-size:.9em; font-weight:900; }.trend.up { color:#047857; }.trend.down { color:#b91c1c; }',
     '.trend-legend { margin:.1rem 0 .7rem; color:#475569; font-size:.82rem; }.trend-legend b { color:#111827; }',
     '.freight { font-weight:750; color:#047857; }.freight.excluded { color:#b45309; }',
     '.decision { font-weight:750; }.decision.accepted { color:#047857; }.decision.partial { color:#b45309; }.decision.rejected { color:#991b1b; }.decision.pending { color:#475569; }',
@@ -166,6 +181,12 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.text-link { color:#1d4ed8; font-weight:750; text-decoration:none; }',
     '.alert { padding:.9rem 1rem; color:#991b1b; background:#fee2e2; border:1px solid #fca5a5; border-radius:.7rem; margin-bottom:1rem; }.link-button { border:0; background:transparent; color:#991b1b; text-decoration:underline; cursor:pointer; }',
     '.empty-state,.loading { padding:2.5rem; color:#334155; text-align:center; background:#fff; border:1px dashed #64748b; border-radius:1rem; }',
+    '.tender-steps { display:grid; grid-template-columns:repeat(4,1fr); gap:.6rem; margin-bottom:1rem; }',
+    '.tender-steps .step { position:relative; display:grid; gap:.15rem; padding:.65rem .8rem .65rem 2.4rem; background:#f8fafc; border:1px solid #e2e8f0; border-radius:.7rem; }',
+    '.tender-steps .step span { position:absolute; left:.75rem; top:50%; transform:translateY(-50%); width:1.3rem; height:1.3rem; border-radius:50%; display:grid; place-items:center; background:#e2e8f0; color:#475569; font-size:.7rem; font-weight:800; }',
+    '.tender-steps .step strong { color:#111827; font-size:.85rem; }.tender-steps .step small { color:#64748b; font-size:.78rem; }',
+    '.tender-steps .step.done { background:#ecfdf5; border-color:#a7f3d0; }.tender-steps .step.done span { background:#047857; color:#fff; }',
+    '@media(max-width:900px){.tender-steps{grid-template-columns:1fr 1fr}}',
     '@media(max-width:1000px){.need-grid{grid-template-columns:1fr 1fr}.offer-row,.award-row{grid-template-columns:1fr 1fr}.offer-head,.award-head{display:none}.page-heading{align-items:flex-start; flex-direction:column}}',
   ],
 })
@@ -173,6 +194,7 @@ export class TenderDetailComponent {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly toast = inject(ToastService);
   tender: TenderDetail | null = null;
   loading = true;
   error = '';
@@ -184,6 +206,7 @@ export class TenderDetailComponent {
   private touched: Record<number, boolean> = {};
   readonly Number = Number;
   readonly numberTr = numberTr;
+  readonly simDurationShort = simDurationShort;
   readonly decisionLabel = decisionLabel;
   readonly awardStatusLabel = awardStatusLabel;
 
@@ -258,6 +281,7 @@ export class TenderDetailComponent {
         next: (tender) => {
           this.touched[offer.participation_id] = false;
           delete this.acceptQty[offer.participation_id];
+          this.toast.show(`${offer.npc_name}: ${numberTr(quantity, 0)} kg kabul edildi`);
           this.apply(tender);
         },
         error: (error: unknown) => {
@@ -282,7 +306,10 @@ export class TenderDetailComponent {
       .finalizeTender(this.tender.id)
       .pipe(finalize(() => (this.finalizing = false)))
       .subscribe({
-        next: (tender) => this.apply(tender),
+        next: (tender) => {
+          this.toast.show(`İhale tamamlandı: ${tender.status === 'NO_AWARD' ? 'sonuçsuz' : 'teslimat planlandı'}`);
+          this.apply(tender);
+        },
         error: (error: unknown) => {
           this.finalizeError = apiErrorMessage(error, 'İhale tamamlanamadı.');
         },

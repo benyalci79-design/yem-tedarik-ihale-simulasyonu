@@ -4,7 +4,7 @@ import { catchError, EMPTY, finalize, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../core/api.service';
 import { SimulationState } from '../core/models';
-import { numberTr } from './display';
+import { simCalendarText } from './display';
 
 @Component({
   selector: 'app-simulation-controls',
@@ -12,8 +12,8 @@ import { numberTr } from './display';
   imports: [CommonModule],
   template: `
     <div class="sim-controls">
-      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.is_running ? 'Simülasyon saati' : 'Simülasyon durdu'">
-        <i></i>{{ numberTr(displayElapsed, 1) }} sn
+      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.elapsed_display ?? 'Simülasyon saati'">
+        <i></i>{{ clockText }}
       </span>
       <div class="segmented" role="group" aria-label="Simülasyon hızı">
         <button type="button" [class.active]="stopped" [disabled]="pending" (click)="stop()">Dur</button>
@@ -25,7 +25,9 @@ import { numberTr } from './display';
           (click)="setSpeed(speed)"
         >{{ speedLabel(speed) }}</button>
       </div>
-      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür">Sıfırla</button>
+      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür" aria-label="Simülasyonu sıfırla">
+        <span class="reset-icon" aria-hidden="true">⟲</span><span class="reset-label">Sıfırla</span>
+      </button>
       <span class="sim-error" *ngIf="error">{{ error }}</span>
     </div>
 
@@ -49,15 +51,18 @@ import { numberTr } from './display';
   `,
   styles: [
     '.sim-controls { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }',
-    '.sim-clock { display:inline-flex; align-items:center; gap:.4rem; color:#e2e8f0; font-weight:750; font-variant-numeric:tabular-nums; font-size:.85rem; padding:.35rem .55rem; background:#1f2937; border-radius:.5rem; }',
+    '.sim-clock { flex-shrink:0; display:inline-flex; align-items:center; gap:.4rem; color:#e2e8f0; font-weight:750; font-variant-numeric:tabular-nums; font-size:.85rem; padding:.35rem .55rem; background:#1f2937; border-radius:.5rem; }',
     '.sim-clock i { width:.55rem; height:.55rem; border-radius:50%; background:#10b981; box-shadow:0 0 0 .2rem rgba(16,185,129,.25); }',
     '.sim-clock.paused i { background:#f59e0b; box-shadow:0 0 0 .2rem rgba(245,158,11,.25); }',
-    '.segmented { display:inline-flex; border:1px solid #374151; border-radius:.55rem; overflow:hidden; }',
+    '.segmented { display:inline-flex; border:1px solid #374151; border-radius:.55rem; overflow:hidden; flex-shrink:0; }',
     '.segmented button { border:0; background:#1f2937; color:#d1d5db; font-size:.82rem; font-weight:750; padding:.4rem .6rem; cursor:pointer; border-right:1px solid #374151; }',
     '.segmented button:last-child { border-right:0; }',
     '.segmented button:hover:not(:disabled) { background:#374151; color:#fff; }',
     '.segmented button.active { background:#1d4ed8; color:#fff; }',
-    '.reset-button { border:1px solid #7f1d1d; background:#1f2937; color:#fca5a5; font-size:.82rem; font-weight:750; padding:.4rem .65rem; border-radius:.55rem; cursor:pointer; }',
+    '.reset-button { flex-shrink:0; display:inline-flex; align-items:center; gap:.3rem; border:1px solid #7f1d1d; background:#1f2937; color:#fca5a5; font-size:.82rem; font-weight:750; padding:.4rem .65rem; border-radius:.55rem; cursor:pointer; }',
+    '.reset-icon { font-size:.95rem; line-height:1; }',
+    '@media(max-width:1700px){ .reset-label{display:none} .reset-button{padding:.4rem .5rem} }',
+    '@media(max-width:1500px){ .segmented button{padding:.35rem .45rem; font-size:.78rem} }',
     '.reset-button:hover:not(:disabled) { background:#7f1d1d; color:#fff; }',
     '.reset-button:disabled, .segmented button:disabled { opacity:.55; cursor:progress; }',
     '.sim-error { color:#fca5a5; font-size:.75rem; }',
@@ -78,9 +83,8 @@ export class SimulationControlsComponent {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
   readonly speeds = ['0.5', '1', '2', '3'];
-  readonly numberTr = numberTr;
   state: SimulationState | null = null;
-  displayElapsed = 0;
+  clockText = '—';
   pending = false;
   error = '';
   resetOpen = false;
@@ -88,6 +92,8 @@ export class SimulationControlsComponent {
   resetError = '';
   private anchorSeconds = 0;
   private anchorTime = performance.now();
+  private running = false;
+  private speed = 1;
 
   constructor() {
     timer(0, 2000)
@@ -96,7 +102,7 @@ export class SimulationControlsComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((state) => this.apply(state));
-    timer(0, 250)
+    timer(0, 1000)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.tickClock());
   }
@@ -177,23 +183,16 @@ export class SimulationControlsComponent {
 
   private tickClock(): void {
     if (!this.state) return;
-    const speed = Number(this.state.speed) || 1;
-    const running = this.state.is_running ? ((performance.now() - this.anchorTime) / 1000) * speed : 0;
-    this.displayElapsed = Math.max(0, this.anchorSeconds + running);
+    const elapsed = this.anchorSeconds + (this.running ? ((performance.now() - this.anchorTime) / 1000) * this.speed : 0);
+    this.clockText = simCalendarText(elapsed).combined;
   }
 
   private apply(state: SimulationState): void {
-    const server = Number(state.elapsed_seconds) || 0;
-    const speed = Number(state.speed) || 1;
-    const local = this.displayElapsed;
     this.state = state;
-    if (!state.is_running) {
-      this.anchorSeconds = server;
-    } else {
-      const drift = local - server;
-      this.anchorSeconds = drift > speed * 2 || drift < -speed * 3 ? server : Math.max(server, local);
-    }
+    this.anchorSeconds = Number(state.elapsed_seconds) || 0;
     this.anchorTime = performance.now();
-    this.displayElapsed = this.anchorSeconds;
+    this.running = state.is_running;
+    this.speed = Number(state.speed) || 1;
+    this.clockText = simCalendarText(this.anchorSeconds).combined;
   }
 }

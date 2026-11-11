@@ -9,8 +9,9 @@ from app.errors import ApiError
 from app.inventory import free_capacity, incoming_kg
 from app.models import Product, SimulationState, Tender
 from app.schemas import ProductPatch
+from app.season import current_progress
 from app.simulation.engine import ACTIVE_STATUSES
-from app.simulation.rules import coverage_minutes
+from app.simulation.rules import coverage_minutes, season_factor, season_phase
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
@@ -41,6 +42,11 @@ def serialize_product(db: Session, product: Product) -> dict:
     active = _active_tenders(db, product.id)
     stock = Decimal(product.current_stock_kg)
     avg_cost = Decimal(product.avg_cost_per_kg)
+    current_season = season_factor(
+        current_progress(db),
+        Decimal(product.season_amplitude),
+        season_phase(product.id),
+    )
     return {
         "id": product.id,
         "code": product.code,
@@ -53,6 +59,9 @@ def serialize_product(db: Session, product: Product) -> dict:
         "capacity_kg": str(product.capacity_kg),
         "avg_cost_per_kg": str(product.avg_cost_per_kg),
         "last_purchase_unit_price": str(product.last_purchase_unit_price),
+        "loss_percent": str(product.loss_percent),
+        "season_amplitude": str(product.season_amplitude),
+        "season_factor": str(current_season),
         "incoming_kg": str(incoming_kg(db, product.id)),
         "free_capacity_kg": str(free_capacity(db, product)),
         "stock_value_tl": str((stock * avg_cost).quantize(Decimal("0.01"))),
@@ -90,6 +99,8 @@ def update_product(product_id: int, payload: ProductPatch, db: Session = Depends
         "offer_window_seconds": product.offer_window_seconds,
         "capacity_kg": Decimal(product.capacity_kg),
         "avg_cost_per_kg": Decimal(product.avg_cost_per_kg),
+        "loss_percent": Decimal(product.loss_percent),
+        "season_amplitude": Decimal(product.season_amplitude),
         **values,
     }
     if merged["target_coverage_minutes"] <= merged["critical_coverage_minutes"]:

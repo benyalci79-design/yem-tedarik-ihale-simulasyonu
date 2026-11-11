@@ -31,6 +31,27 @@ Bu komut `frontend/proxy.conf.json` üzerinden `/api` isteklerini `http://localh
 
 Hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenmez.
 
+## İzole geliştirme ortamı
+
+Ana demo ortamına (8080) dokunmadan ikinci bir stack çalıştırmak için:
+
+```powershell
+Copy-Item .env.dev.example .env.dev
+docker compose -p yem-dev --env-file .env.dev up -d --build
+```
+
+- Arayüz: http://localhost:18080
+- API: http://localhost:18000
+- Veritabanı: `yem_simulation_dev`, kendi volume'u: `yem-dev_db_data`
+
+Proje adı (`-p yem-dev`) sayesinde container'lar, ağ ve volume'lar ana ortamdan ayrıdır; ana demo http://localhost:8080 üzerinde çalışmaya devam eder. Kapatmak için:
+
+```powershell
+docker compose -p yem-dev down -v
+```
+
+`-v` dev veritabanını da siler. Ana ortamı yeniden derlerken `Developer` dalında olun; aksi hâlde ana stack, üzerinde çalışılan dalın kodunu derler.
+
 ## Katmanlar
 
 - `backend/`: Python 3.12, FastAPI, Pydantic 2, SQLAlchemy 2 senkron, PyMySQL, Alembic.
@@ -40,6 +61,16 @@ Hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenme
 - `backend/app/simulation/`: saf iş kuralları, NPC teklif üretimi ve kronolojik tick motoru.
 
 Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden yayın yapar (yerelde backend ayrıca 127.0.0.1:8000'de dinler). Backend tek Uvicorn worker ile çalışır.
+
+## Zaman ölçeği
+
+Simülasyon saati gerçek zamandan bağımsız, hızlandırılmış bir takvimle gösterilir:
+
+- 1 sim günü = 30 saniye, 1 ay = 30 gün = 900 saniye, 1 yıl = 12 ay = 10.800 saniye.
+- Simülasyon süresi `X yıl Y ay Z gün SS:DD` biçiminde gösterilir (üst bar ve Özet); tam kırılım (`SS:DD:SS`) ipucu metnindedir. Saat istemcide her saniye yumuşak biçimde akar (2 saniyelik sunucu yoklaması araya interpolasyonla doldurulur).
+- Mevsim döngüsü bir sim yılıdır (10.800 sn); yani her mevsim ~2.700 sn sürer ve timeline otomatik ilerler.
+- Bütçe dönemi bir sim ayıdır (900 sn).
+- Demo başlangıcı 1.750 sn'dir (1 ay 28 gün); geçmiş alımlar bu tarihten öncedir.
 
 ## Simülasyon davranışı
 
@@ -52,8 +83,11 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - **Kabul:** Kullanıcı bir tekliften `quantity_kg` kadar kabul eder. Üst sınır `min(teklif miktarı, kalan ihtiyaç, boş kapasite)`. Bir tekliften yalnızca bir kez miktar alınır; miktar teklifin tamamıysa `ACCEPTED`, azıysa `PARTIAL`. İhale birden fazla NPC'den karşılanabilir.
 - **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
 - **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
+- **Fire:** Her ürünün `loss_percent` oranı vardır (MISR %1, ARPA %0,5, SOYA %1,5). Teslimatta kabul edilen kg `quantity × (1 − fire)` olur; ödenen tutar değişmediği için **birim maliyet yükselir**. Fire miktarı award'da `loss_kg` olarak saklanır.
+- **Mevsimsellik:** Mevsim ilerlemesi (`simulation_state.season_progress`, 0–1) simülasyon zamanıyla yavaşça artar (1 sim saati = 1 yıl) ve üst bardaki **mevsim timeline'ından sürüklenerek** elle değiştirilebilir. Her ürünün `season_amplitude` genliği vardır; teklif fiyatı `1 + genlik × sin(2π ilerleme + faz)` katsayısıyla üretilir ve teklifte `season_factor` olarak saklanır. Böylece aynı NPC farklı mevsimlerde farklı fiyat verir.
+- **Bütçe:** Aylık (900 sim saniyelik dönem) satın alma limiti `budgets` tablosunda tutulur (varsayılan 500.000 TL). Dönem harcaması, kabul edilen award'ların maliyetiyle hesaplanır; %80'de uyarı, limit aşımında teklif kabulü `422 BUDGET_EXCEEDED` ile reddedilir. Limit `PATCH /budget` ile (simülasyon duraklatılmışken) değiştirilir.
 - **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
-- **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; ardından **demo geçmişini** (5 tamamlanmış ihale, award'ları ve stok geçmişi) yeniden yükler. Saat bu geçmişin bittiği ana (1800 sn) alınır, hız 1x olur ve simülasyon duraklatılır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
+- **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; ardından **demo geçmişini** (5 tamamlanmış ihale, award'ları ve stok geçmişi) yeniden yükler. Saat demo geçmişinin bittiği ana (1.750 sn = 1 ay 28 gün) alınır, mevsim İlkbahar'a döner, hız 1x olur ve simülasyon duraklatılır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
 
 ## Maliyet hesabı
 
@@ -69,7 +103,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 `/api/v1` altında:
 
 - `GET /health`
-- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`, `/simulation/reset`
+- `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`, `/simulation/season`, `/simulation/reset`
 - `GET /products`, `PATCH /products/{id}` (kapasite, ortalama maliyet ve son alım birim fiyatı dahil)
 - `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}` (nakliye modu, mevcut miktar aralığı dahil)
 - `GET /tenders?product_id=&status=`, `POST /tenders`
@@ -78,6 +112,9 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - `GET /carriers`, `GET /shipments?status=`, `POST /shipments/{award_id}/assign-carrier`
 - `GET /stock-metrics`, `GET /stock-metrics/history?limit=`
 - `GET /purchase-stats`
+- `GET|PATCH /budget`
+- `GET /supplier-scores`
+- `GET /notifications`
 
 Decimal değerler JSON'da dizge olarak döner. Liste yanıtları `{items:[...]}`, hatalar `{error:{code,message}}` biçimindedir.
 
@@ -91,8 +128,9 @@ Entrypoint sırası:
 
 Seed **eklemelidir**: mevcut kayıtları ve ayarları değiştirmez, yalnızca eksikleri ekler.
 
-- 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet).
+- 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet; fire %1 / %0,5 / %1,5; mevsim genliği %8 / %6 / %10).
 - **Demo geçmişi:** veritabanı boşsa (ilk kurulum veya sıfırlama sonrası) 300–1500 sn aralığında tamamlanmış **5 ihale**, teklifleri, award'ları ve stok geçmişi eklenir. Böylece kullanıcı ilk açılışta ürünlerin son/en ucuz/en pahalı/ortalama alım fiyatlarını görür. Geçmiş doluysa seed dokunmaz.
+- 1 bütçe kaydı (`YEM-HAM`, aylık 500.000 TL).
 - **10 NPC** (A–J). Cevap olasılıkları 0,00–1,00; teslim süreleri 1–8 dk; 4 NPC nakliye hariç ve bu yüzden %5–10 daha ucuz; teklif miktarları 300–6000 kg arasında değişir, böylece 2–3 tonluk bir ihale genelde tek NPC'den karşılanmaz.
 - Her NPC için her üründe bir kural (30 kural).
 - **4 nakliyeci:** Toplu Yük (150 TL/ton, 12 dk), Ekonomik (180, 8), Standart (450, 5), Ekspres (900, 2).
@@ -129,8 +167,9 @@ Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, ola
 - `/tenders`: İhale Listesi — üstte **tüm ürünlerin alım fiyatı barı** (son / en ucuz / en pahalı / ortalama), **yeni ihale açma paneli** (önerilen miktar ve boş kapasite ile), filtreler, kabul özeti.
 - `/tenders/:id`: İhale Detayı — üstte **kompakt stok şeridi** (depo doluluğu, yoldaki miktar, boş kapasite, **son alım birim fiyatı**, ortalama maliyet), gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, her teklifte son alıma göre **yeşil ▲ (daha ucuz) / kırmızı ▼ (daha pahalı)** işareti, "İhaleyi tamamla", teslimat/award listesi.
 - `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
+- `/suppliers`: Tedarikçiler — NPC performans skorları (fiyat rekabeti, katılım, kazanma oranı, ortalama teslim süresi).
 
-Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati ve onay penceresi açan **Sıfırla** düğmesi tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
+Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**), simülasyon saati, onay penceresi açan **Sıfırla** düğmesi ve **bildirim zili** (okunmamış sayacı + panel) tüm ekranlarda görünür. Üst bar ve altındaki **mevsim timeline'ı** sayfa kaydırıldığında sabit kalır (sticky); timeline sürüklenerek mevsim (İlkbahar/Yaz/Sonbahar/Kış) değiştirilebilir. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
 
 ## Frontend notları
 
@@ -154,9 +193,18 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 9. **PASS** — Testler/derleme: `pytest -q` 19 passed; `npm test` (üretim derlemesi) başarılı; 6 route headless Chrome'da hatasız render edildi.
 10. **PASS** — Migration: dolu veritabanında `alembic upgrade head` çalıştı; backfill (kapasite/maliyet) uygulandı, veri kaybı olmadı.
 11. **PASS** — Birim fiyat korunması: stok 0 iken MISR `avg_cost_per_kg=8.360075` ve `last_purchase_unit_price=8.360075` döndü (0 değil); 1.000 kg teslim alınınca ikisi de 9,060270 oldu; depo boşken toplam birim fiyat `_last_known_avg` ile korunuyor (birim testi).
-12. **PASS** — Sıfırlama: `POST /simulation/reset` sonrası tüm eski ihaleler silindi, yerine 5 demo ihalesi (300–1500 sn, DELIVERED) geldi; ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 1800 sn, hız 1x, durum duraklatıldı. Arayüzde Sıfırla → onay penceresi → "Vazgeç" kapatıyor, "Evet, sıfırla" sonrası sayfa `/` adresine dönüp 1.800,0 sn gösteriyor.
+12. **PASS** — Sıfırlama: `POST /simulation/reset` sonrası tüm eski ihaleler silindi, yerine 5 demo ihalesi (300–1500 sn, DELIVERED) geldi; ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 1.750 sn ("1 ay 28 gün 08:00"), mevsim İlkbahar, hız 1x, durum duraklatıldı.
 13. **PASS** — Alım barı ve yön işaretleri: `GET /purchase-stats` demo geçmişiyle MISR 8,90/8,60/8,90/8,736, ARPA 7,90/7,60/7,90/7,733 ve SOYA 13,00 döndü; teklif ekranında son alıma göre yeşil ▲ / kırmızı ▼ işaretleri render edildi (headless Chrome DOM).
 14. **PASS** — Demo geçmişi: sıfırlama sonrası ihale listesinde 5 tamamlanmış ihale, `purchase-stats`'ta 2/2/1 alım ve `stock-metrics/history`'de 11 nokta oluştu; ilk açılışta alım fiyatı barı dolu geliyor.
+15. **PASS** — Fire: 500 kg'lık teslimat %1 fire ile 495 kg kabul edildi (`loss_kg=5`), ortalama maliyet 8,75 → 8,794 TL/kg yükseldi; `stock-metrics.total_loss_kg/tl` 5 kg / 43,75 TL döndü.
+16. **PASS** — Mevsimsellik: teklifler açılış anındaki katsayıyla üretildi (×0,934); ürün detayında "Sezon ×0,93", teklif satırında "sezon ×0,93" göründü.
+17. **PASS** — Bütçe: 500.000 TL limit, 34.990 TL harcama (%7,00), 465.010 TL kalan ve `period_index=2` döndü; limit 1.000 TL'ye çekilince 100 kg kabul `422 BUDGET_EXCEEDED` ("Kalan: 0.00 TL, bu alım: 919.33 TL") ile reddedildi.
+18. **PASS** — Tedarikçi skorcard: 10 NPC için skor üretildi (NPC-A 91 … NPC-C/I 0); `/suppliers` tablosu skor çubuğu ve metriklerle render edildi.
+19. **PASS** — Bildirim kutusu: 5 aktif bildirim (kritik stok, karar bekleyen ihale, sezon) üretildi; zil sayacı 5, panel 5 satır gösterdi, konsol hatası yok.
+20. **PASS** — İzole dev ortamı: 18080/18000 ayrı stack ve ayrı veritabanı; ana demo 8080 sağlıklı kaldı.
+21. **PASS** — Mevsim timeline'ı: 0,75'e sürüklendiğinde `season_progress=0.7500`, etiket "Kış" oldu ve sunucuya yazıldı; 3x hızda 10 sn'de ilerleme 0 → 0,0076 (otomatik akış); üst bar `position: sticky` doğrulandı.
+22. **PASS** — Takvim gösterimi: 1.750 sn için `elapsed_display="1 ay 28 gün 08:00:00"`, kısa biçim `"1 ay 28 gün 08:00"`; grafiklerin x ekseni de aynı kısa takvim biçimini kullanıyor.
+23. **PASS** — Akıcı saat: 3x hızda 1 saniyelik örneklerde `2 ay 15:44 → 16:46 → 19:05 → 21:42` şeklinde her saniye ilerledi (2 saniyelik sıçrama yok), konsol hatası yok.
 
 ## Veri kalıcılığı
 
@@ -167,3 +215,5 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 - Eski demo verileri (otomatik açılmış ihaleler, 3 NPC'lik kural seti) volume'da kalabilir; seed eklemeli çalıştığı için bunlar silinmez. Temiz bir demo için kullanıcı kontrollü `docker compose down -v` sonrası yeniden başlatın.
 - Eski ihalelerin `evaluate_at_seconds` ve `winning_participation_id` alanları geriye dönük uyumluluk için durur, yeni akışta kullanılmaz.
 - Nakliye hariç bir award, nakliyeci atanmadan teslim edilmez ve boş kapasiteyi işgal etmeye devam eder.
+- Bildirim kutusunda "okundu" durumu tarayıcıda (`localStorage`) tutulur; kullanıcı/oturum yönetimi (A1) eklendiğinde sunucu tarafına taşınmalıdır.
+- Bütçe dönemi demo için 3600 sim saniyedir (1 sim saati = 1 ay). Gerçek takvim entegrasyonu kapsam dışıdır.

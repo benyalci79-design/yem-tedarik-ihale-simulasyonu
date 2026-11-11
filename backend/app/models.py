@@ -24,6 +24,8 @@ class Product(Base):
     last_purchase_unit_price: Mapped[Decimal] = mapped_column(
         DECIMAL(14, 6), nullable=False, server_default="0"
     )
+    loss_percent: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, server_default="0")
+    season_amplitude: Mapped[Decimal] = mapped_column(DECIMAL(5, 2), nullable=False, server_default="0")
     next_eligible_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, default=0)
 
     npc_rules: Mapped[list["NpcRule"]] = relationship(back_populates="product", passive_deletes=True)
@@ -78,6 +80,7 @@ class SimulationState(Base):
     last_tick_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     last_error: Mapped[str | None] = mapped_column(VARCHAR(500), nullable=True)
     speed_multiplier: Mapped[Decimal] = mapped_column(DECIMAL(4, 2), nullable=False, server_default="1.00")
+    season_progress: Mapped[Decimal] = mapped_column(DECIMAL(6, 4), nullable=False, server_default="0")
 
 
 class Tender(Base):
@@ -140,6 +143,7 @@ class TenderParticipation(Base):
     freight_included: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
     min_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="1000")
     max_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="3000")
+    season_factor: Mapped[Decimal] = mapped_column(DECIMAL(6, 4), nullable=False, server_default="1.0000")
     will_respond: Mapped[bool] = mapped_column(BOOLEAN, nullable=False)
     response_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     has_offer: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
@@ -198,11 +202,22 @@ class TenderAward(Base):
     carrier_assigned_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivery_due_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivered_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
+    loss_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="0")
     landed_cost_tl: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 2), nullable=True)
 
     tender: Mapped[Tender] = relationship(back_populates="awards", foreign_keys=[tender_id])
     participation: Mapped[TenderParticipation] = relationship(back_populates="award", foreign_keys=[participation_id])
     carrier: Mapped[Carrier | None] = relationship(back_populates="awards")
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    code: Mapped[str] = mapped_column(VARCHAR(30), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    monthly_limit_tl: Mapped[Decimal] = mapped_column(DECIMAL(16, 2), nullable=False)
+    is_active: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
 
 
 class StockSnapshot(Base):

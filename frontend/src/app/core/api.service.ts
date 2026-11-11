@@ -2,6 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AppNotification,
+  BudgetState,
   Carrier,
   HistoryPoint,
   NpcRule,
@@ -10,6 +12,7 @@ import {
   Shipment,
   SimulationState,
   StockMetrics,
+  SupplierScore,
   TenderDetail,
   TenderSummary,
 } from './models';
@@ -39,6 +42,12 @@ export class ApiService {
 
   setSpeed(speed: string): Observable<SimulationState> {
     return this.http.post<SimulationState>(this.base + '/simulation/speed', { speed });
+  }
+
+  setSeason(progress: number): Observable<SimulationState> {
+    return this.http.post<SimulationState>(this.base + '/simulation/season', {
+      progress: progress.toFixed(4),
+    });
   }
 
   resetSimulation(): Observable<SimulationState> {
@@ -120,5 +129,23 @@ export class ApiService {
 
   purchaseStats(): Observable<{ items: PurchaseStatsItem[] }> {
     return this.http.get<{ items: PurchaseStatsItem[] }>(this.base + '/purchase-stats');
+  }
+
+  budget(): Observable<BudgetState> {
+    return this.http.get<BudgetState>(this.base + '/budget');
+  }
+
+  updateBudget(monthlyLimit: number): Observable<BudgetState> {
+    return this.http.patch<BudgetState>(this.base + '/budget', {
+      monthly_limit_tl: monthlyLimit.toFixed(2),
+    });
+  }
+
+  supplierScores(): Observable<{ items: SupplierScore[] }> {
+    return this.http.get<{ items: SupplierScore[] }>(this.base + '/supplier-scores');
+  }
+
+  notifications(): Observable<{ items: AppNotification[] }> {
+    return this.http.get<{ items: AppNotification[] }>(this.base + '/notifications');
   }
 }
