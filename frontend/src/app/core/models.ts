@@ -212,6 +212,20 @@ export interface BudgetState {
   exceeded: boolean;
 }
 
+export interface SupplierScore {
+  supplier_id: number;
+  code: string;
+  name: string;
+  invitations: number;
+  offers: number;
+  awards: number;
+  response_rate: string;
+  win_rate: string;
+  avg_price_deviation_pct: string;
+  avg_delivery_minutes: string;
+  score: string;
+}
+
 export interface ChartSeries {
   id: string;
   label: string;

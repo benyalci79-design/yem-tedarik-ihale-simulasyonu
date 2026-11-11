@@ -11,6 +11,7 @@ import {
   Shipment,
   SimulationState,
   StockMetrics,
+  SupplierScore,
   TenderDetail,
   TenderSummary,
 } from './models';
@@ -131,5 +132,9 @@ export class ApiService {
     return this.http.patch<BudgetState>(this.base + '/budget', {
       monthly_limit_tl: monthlyLimit.toFixed(2),
     });
+  }
+
+  supplierScores(): Observable<{ items: SupplierScore[] }> {
+    return this.http.get<{ items: SupplierScore[] }>(this.base + '/supplier-scores');
   }
 }

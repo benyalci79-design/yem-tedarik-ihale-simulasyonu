@@ -8,7 +8,17 @@ from sqlalchemy import text
 
 from app.db import SessionLocal
 from app.errors import ApiError, api_error_handler, generic_error_handler, validation_error_handler
-from app.routers import budget, metrics, npc_rules, products, purchases, shipping, simulation, tenders
+from app.routers import (
+    budget,
+    metrics,
+    npc_rules,
+    products,
+    purchases,
+    shipping,
+    simulation,
+    supplier_scores,
+    tenders,
+)
 from app.runtime import start_runtime, stop_runtime
 
 
@@ -36,6 +46,7 @@ app.include_router(shipping.router)
 app.include_router(metrics.router)
 app.include_router(purchases.router)
 app.include_router(budget.router)
+app.include_router(supplier_scores.router)
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, generic_error_handler)
