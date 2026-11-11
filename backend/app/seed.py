@@ -20,6 +20,9 @@ PRICE_RANGES = {
     "ARPA": (Decimal("7000.00"), Decimal("8500.00")),
     "SOYA": (Decimal("12000.00"), Decimal("14000.00")),
 }
+LEGACY_PRODUCT_CODES = {
+    "MISR": ("MISIR",),
+}
 
 
 def main() -> None:
@@ -32,6 +35,11 @@ def main() -> None:
         products_by_code: dict[str, Product] = {}
         for code, name, stock, consumption, critical, target, window in PRODUCTS:
             product = db.scalar(select(Product).where(Product.code == code))
+            if product is None:
+                for legacy_code in LEGACY_PRODUCT_CODES.get(code, ()):
+                    product = db.scalar(select(Product).where(Product.code == legacy_code))
+                    if product is not None:
+                        break
             if product is None:
                 product = Product(
                     code=code,
