@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from sqlalchemy import select
 
 from app.db import SessionLocal
+from app.demo_history import seed_history
 from app.models import Carrier, NpcRule, NpcSupplier, Product, SimulationState
 
 TWO_PLACES = Decimal("0.01")
@@ -56,8 +57,10 @@ def main() -> None:
     """Eksik seed kayıtlarını ekler; var olan ayarları ve planları değiştirmez."""
     with SessionLocal.begin() as db:
         state = db.get(SimulationState, 1)
+        created_state = state is None
         if state is None:
-            db.add(SimulationState(id=1, is_running=False, elapsed_seconds=Decimal("0")))
+            state = SimulationState(id=1, is_running=False, elapsed_seconds=Decimal("0"))
+            db.add(state)
 
         products_by_code: dict[str, Product] = {}
         for (
@@ -154,6 +157,10 @@ def main() -> None:
                         is_active=True,
                     )
                 )
+
+        baseline = seed_history(db)
+        if baseline is not None and Decimal(state.elapsed_seconds) < baseline:
+            state.elapsed_seconds = baseline
 
 
 def restore_defaults(db) -> None:
@@ -282,6 +289,8 @@ def restore_defaults(db) -> None:
         carrier.price_per_ton = price_per_ton
         carrier.transit_minutes = transit_minutes
         carrier.is_active = True
+
+    return seed_history(db)
 
 
 if __name__ == "__main__":

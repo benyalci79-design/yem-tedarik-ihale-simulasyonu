@@ -33,9 +33,9 @@ import { numberTr } from './display';
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title" (click)="$event.stopPropagation()">
         <h2 id="reset-title">Simülasyonu sıfırlamak istediğinize emin misiniz?</h2>
         <p>
-          Tüm ihaleler, teklifler, teslimatlar ve stok geçmişi silinecek. Ürün, NPC ve nakliyeci ayarları
-          başlangıç değerlerine dönecek; simülasyon saati 0'a alınacak ve simülasyon duracak.
-          <strong>Bu işlem geri alınamaz.</strong>
+          Tüm ihaleler, teklifler, teslimatlar ve stok geçmişi silinip yerine demo geçmişi
+          (geçmiş alımlar) yüklenecek. Ürün, NPC ve nakliyeci ayarları başlangıç değerlerine
+          dönecek; simülasyon duraklatılacak. <strong>Bu işlem geri alınamaz.</strong>
         </p>
         <div class="modal-actions">
           <button type="button" class="button ghost" [disabled]="resetting" (click)="cancelReset()">Vazgeç</button>

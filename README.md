@@ -53,7 +53,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 - **Tamamlama:** `POST /tenders/{id}/finalize` ihaleyi kapatır. En az bir award varsa `AWARDED`, hiç yoksa `NO_AWARD`; kabul edilmeyen teklifler `REJECTED` olur. Karşılanmayan miktar kaybolur, kullanıcı gerekirse yeni ihale açar.
 - **Teslimat:** Her award ayrı teslim edilir. Nakliye dahil teklifler kabul anında `IN_TRANSIT` olur; hariç olanlar nakliyeci atanana kadar `AWAITING_CARRIER` bekler. Teslimde stok `quantity_kg` kadar artar ve ortalama maliyet `landed_cost_tl` ile ağırlıklı ortalamaya girer. Aynı award ikinci kez stok eklemez (idempotent).
 - **Backend yeniden başlarsa** simülasyon duraklatılır; kapalı gerçek zaman tüketim olarak yazılmaz.
-- **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; saati 0'a alır, hızı 1x yapar ve simülasyonu duraklatır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
+- **Sıfırlama:** `POST /simulation/reset` tüm ihaleleri, teklifleri, award'ları ve stok geçmişini siler; ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür; ardından **demo geçmişini** (5 tamamlanmış ihale, award'ları ve stok geçmişi) yeniden yükler. Saat bu geçmişin bittiği ana (1800 sn) alınır, hız 1x olur ve simülasyon duraklatılır. Arayüzde üst bardaki **Sıfırla** düğmesi onay penceresi gösterir; onaylanınca sayfa yenilenir. İşlem geri alınamaz.
 
 ## Maliyet hesabı
 
@@ -92,6 +92,7 @@ Entrypoint sırası:
 Seed **eklemelidir**: mevcut kayıtları ve ayarları değiştirmez, yalnızca eksikleri ekler.
 
 - 3 ürün (MISR 5000 kg, ARPA 4000 kg, SOYA 6000 kg kapasite; 8,75 / 7,75 / 13,00 TL/kg ortalama maliyet).
+- **Demo geçmişi:** veritabanı boşsa (ilk kurulum veya sıfırlama sonrası) 300–1500 sn aralığında tamamlanmış **5 ihale**, teklifleri, award'ları ve stok geçmişi eklenir. Böylece kullanıcı ilk açılışta ürünlerin son/en ucuz/en pahalı/ortalama alım fiyatlarını görür. Geçmiş doluysa seed dokunmaz.
 - **10 NPC** (A–J). Cevap olasılıkları 0,00–1,00; teslim süreleri 1–8 dk; 4 NPC nakliye hariç ve bu yüzden %5–10 daha ucuz; teklif miktarları 300–6000 kg arasında değişir, böylece 2–3 tonluk bir ihale genelde tek NPC'den karşılanmaz.
 - Her NPC için her üründe bir kural (30 kural).
 - **4 nakliyeci:** Toplu Yük (150 TL/ton, 12 dk), Ekonomik (180, 8), Standart (450, 5), Ekspres (900, 2).
@@ -153,8 +154,9 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 9. **PASS** — Testler/derleme: `pytest -q` 19 passed; `npm test` (üretim derlemesi) başarılı; 6 route headless Chrome'da hatasız render edildi.
 10. **PASS** — Migration: dolu veritabanında `alembic upgrade head` çalıştı; backfill (kapasite/maliyet) uygulandı, veri kaybı olmadı.
 11. **PASS** — Birim fiyat korunması: stok 0 iken MISR `avg_cost_per_kg=8.360075` ve `last_purchase_unit_price=8.360075` döndü (0 değil); 1.000 kg teslim alınınca ikisi de 9,060270 oldu; depo boşken toplam birim fiyat `_last_known_avg` ile korunuyor (birim testi).
-12. **PASS** — Sıfırlama: 24 ihale ve 4 award varken `POST /simulation/reset` sonrası ihale/teslimat/geçmiş 0, ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 0, hız 1x, durum duraklatıldı. Arayüzde Sıfırla → onay penceresi → "Vazgeç" kapatıyor, "Evet, sıfırla" sonrası sayfa `/` adresine dönüp 0,0 sn gösteriyor.
-13. **PASS** — Alım barı ve yön işaretleri: `GET /purchase-stats` tek alımda son/en ucuz/en pahalı/ortalama = 8,42 (MISR) ve 13,27 (SOYA) döndü; teklif ekranında 13,27 TL/kg son alıma göre 11,65/11,87/12,93 teklifleri yeşil ▲, 13,65/14,80 teklifleri kırmızı ▼ olarak render edildi (headless Chrome DOM).
+12. **PASS** — Sıfırlama: `POST /simulation/reset` sonrası tüm eski ihaleler silindi, yerine 5 demo ihalesi (300–1500 sn, DELIVERED) geldi; ürünler 900/700/3000 kg ve 8,75/7,75/13,00 TL/kg'a döndü, saat 1800 sn, hız 1x, durum duraklatıldı. Arayüzde Sıfırla → onay penceresi → "Vazgeç" kapatıyor, "Evet, sıfırla" sonrası sayfa `/` adresine dönüp 1.800,0 sn gösteriyor.
+13. **PASS** — Alım barı ve yön işaretleri: `GET /purchase-stats` demo geçmişiyle MISR 8,90/8,60/8,90/8,736, ARPA 7,90/7,60/7,90/7,733 ve SOYA 13,00 döndü; teklif ekranında son alıma göre yeşil ▲ / kırmızı ▼ işaretleri render edildi (headless Chrome DOM).
+14. **PASS** — Demo geçmişi: sıfırlama sonrası ihale listesinde 5 tamamlanmış ihale, `purchase-stats`'ta 2/2/1 alım ve `stock-metrics/history`'de 11 nokta oluştu; ilk açılışta alım fiyatı barı dolu geliyor.
 
 ## Veri kalıcılığı
 
