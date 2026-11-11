@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AppNotification,
   BudgetState,
   Carrier,
   HistoryPoint,
@@ -136,5 +137,9 @@ export class ApiService {
 
   supplierScores(): Observable<{ items: SupplierScore[] }> {
     return this.http.get<{ items: SupplierScore[] }>(this.base + '/supplier-scores');
+  }
+
+  notifications(): Observable<{ items: AppNotification[] }> {
+    return this.http.get<{ items: AppNotification[] }>(this.base + '/notifications');
   }
 }

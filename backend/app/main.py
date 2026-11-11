@@ -11,6 +11,7 @@ from app.errors import ApiError, api_error_handler, generic_error_handler, valid
 from app.routers import (
     budget,
     metrics,
+    notifications,
     npc_rules,
     products,
     purchases,
@@ -47,6 +48,7 @@ app.include_router(metrics.router)
 app.include_router(purchases.router)
 app.include_router(budget.router)
 app.include_router(supplier_scores.router)
+app.include_router(notifications.router)
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, generic_error_handler)

@@ -226,6 +226,14 @@ export interface SupplierScore {
   score: string;
 }
 
+export interface AppNotification {
+  id: string;
+  severity: 'danger' | 'warning' | 'info';
+  title: string;
+  detail: string;
+  link: string;
+}
+
 export interface ChartSeries {
   id: string;
   label: string;
