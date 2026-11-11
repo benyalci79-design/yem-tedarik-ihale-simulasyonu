@@ -3,7 +3,7 @@ import { Component, DestroyRef, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, EMPTY } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ApiService } from '../../core/api.service';
+import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { NpcRule } from '../../core/models';
 import { numberTr } from '../../shared/display';
 
@@ -30,11 +30,13 @@ export class NpcRulesComponent {
 
   load(): void {
     this.loading = true;
+    this.error = '';
     this.api.npcRules().pipe(
       catchError(() => { this.error = 'NPC kuralları yüklenemedi.'; this.loading = false; return EMPTY; }),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(result => {
       this.rules = result.items;
+      this.error = '';
       for (const rule of this.rules) {
         this.forms[rule.id] = this.fb.group({
           is_invited: [rule.is_invited],
@@ -52,13 +54,22 @@ export class NpcRulesComponent {
   save(rule: NpcRule): void {
     const form = this.forms[rule.id];
     if (form.invalid) return;
+    const values = form.getRawValue();
+    if (Number(values.max_price) < Number(values.min_price)) {
+      this.formError[rule.id] = 'Maksimum fiyat minimum fiyattan küçük olamaz.';
+      return;
+    }
+    if (Number(values.max_delivery_minutes) < Number(values.min_delivery_minutes)) {
+      this.formError[rule.id] = 'Maksimum teslim süresi minimum teslim süresinden küçük olamaz.';
+      return;
+    }
     this.saving[rule.id] = true;
     this.formError[rule.id] = '';
-    this.api.updateNpcRule(rule.id, form.getRawValue()).subscribe({
+    this.api.updateNpcRule(rule.id, values).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => { this.saving[rule.id] = false; this.load(); },
       error: (error: { error?: { message?: string } }) => {
         this.saving[rule.id] = false;
-        this.formError[rule.id] = error.error?.message ?? 'Kural kaydedilemedi.';
+        this.formError[rule.id] = apiErrorMessage(error, 'Kural kaydedilemedi.');
       }
     });
   }

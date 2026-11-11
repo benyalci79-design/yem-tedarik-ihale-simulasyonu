@@ -3,7 +3,7 @@ import { Component, DestroyRef, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, EMPTY, timer, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ApiService } from '../../core/api.service';
+import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Product } from '../../core/models';
 import { numberTr } from '../../shared/display';
 
@@ -29,11 +29,13 @@ export class ProductsComponent {
   constructor() { this.load(); }
 
   load(): void {
+    this.error = '';
     this.api.products().pipe(
       catchError(() => { this.error = 'Ürünler yüklenemedi.'; this.loading = false; return EMPTY; }),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(result => {
       this.products = result.items;
+      this.error = '';
       for (const product of this.products) {
         this.forms[product.id] = this.fb.group({
           current_stock_kg: [Number(product.current_stock_kg), [Validators.required, Validators.min(0)]],
@@ -50,13 +52,18 @@ export class ProductsComponent {
   save(product: Product): void {
     const form = this.forms[product.id];
     if (form.invalid) return;
+    const values = form.getRawValue();
+    if (Number(values.target_coverage_minutes) <= Number(values.critical_coverage_minutes)) {
+      this.formError[product.id] = 'Hedef kapsama kritik kapsama değerinden büyük olmalıdır.';
+      return;
+    }
     this.saving[product.id] = true;
     this.formError[product.id] = '';
-    this.api.updateProduct(product.id, form.getRawValue()).subscribe({
+    this.api.updateProduct(product.id, values).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => { this.saving[product.id] = false; this.load(); },
       error: (error: { error?: { message?: string } }) => {
         this.saving[product.id] = false;
-        this.formError[product.id] = error.error?.message ?? 'Ayar kaydedilemedi.';
+        this.formError[product.id] = apiErrorMessage(error, 'Ayar kaydedilemedi.');
       }
     });
   }

@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { catchError, EMPTY, switchMap, timer } from 'rxjs';
+import { catchError, EMPTY, merge, Subject, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../../core/api.service';
 import { Product, TenderSummary } from '../../core/models';
@@ -26,20 +26,32 @@ export class TendersComponent {
   error = '';
   readonly numberTr = numberTr;
   readonly filters = this.fb.group({ productId: [null as number | null], status: [''] });
+  private readonly refresh$ = new Subject<void>();
 
   constructor() {
-    this.api.products().subscribe(result => this.products = result.items);
-    this.filters.valueChanges.subscribe(() => this.load());
-    this.load();
+    this.api.products().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: result => this.products = result.items,
+      error: () => this.error = 'Ürün filtresi yüklenemedi.',
+    });
+    this.filters.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.refresh$.next());
+    merge(timer(0, 2000), this.refresh$).pipe(
+      switchMap(() => {
+        this.loading = true;
+        const value = this.filters.getRawValue();
+        return this.api.tenders(value.productId ?? undefined, value.status || undefined).pipe(
+          catchError(() => { this.error = 'İhaleler yüklenemedi.'; this.loading = false; return EMPTY; }),
+        );
+      }),
+      takeUntilDestroyed(this.destroyRef),
+    ).subscribe(result => {
+      this.tenders = result.items;
+      this.loading = false;
+      this.error = '';
+    });
   }
 
   load(): void {
     this.loading = true;
-    const value = this.filters.getRawValue();
-    timer(0, 2000).pipe(
-      switchMap(() => this.api.tenders(value.productId ?? undefined, value.status || undefined)),
-      catchError(() => { this.error = 'İhaleler yüklenemedi.'; this.loading = false; return EMPTY; }),
-      takeUntilDestroyed(this.destroyRef)
-    ).subscribe(result => { this.tenders = result.items; this.loading = false; this.error = ''; });
+    this.refresh$.next();
   }
 }

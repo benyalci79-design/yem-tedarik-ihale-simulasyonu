@@ -3,6 +3,12 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { NpcRule, Product, SimulationState, TenderDetail, TenderSummary } from './models';
 
+export function apiErrorMessage(error: unknown, fallback: string): string {
+  const response = error as { error?: { error?: { message?: unknown } } };
+  const message = response?.error?.error?.message;
+  return typeof message === 'string' && message.length > 0 ? message : fallback;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
