@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { catchError, EMPTY, timer, switchMap } from 'rxjs';
+import { catchError, EMPTY, finalize, timer, switchMap } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { Product } from '../../core/models';
@@ -32,6 +32,7 @@ export class ProductsComponent {
     this.error = '';
     this.api.products().pipe(
       catchError(() => { this.error = 'Ürünler yüklenemedi.'; this.loading = false; return EMPTY; }),
+      finalize(() => this.loading = false),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(result => {
       this.products = result.items;
@@ -48,7 +49,6 @@ export class ProductsComponent {
           offer_window_seconds: [product.offer_window_seconds, [Validators.required, Validators.min(10), Validators.max(600)]]
         });
       }
-      this.loading = false;
     });
   }
 

@@ -27,6 +27,7 @@ export class TendersComponent {
   readonly numberTr = numberTr;
   readonly filters = this.fb.group({ productId: [null as number | null], status: [''] });
   private readonly refresh$ = new Subject<void>();
+  private hasLoaded = false;
 
   constructor() {
     this.api.products().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
@@ -36,16 +37,17 @@ export class TendersComponent {
     this.filters.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.refresh$.next());
     merge(timer(0, 2000), this.refresh$).pipe(
       switchMap(() => {
-        this.loading = true;
+        if (!this.hasLoaded) this.loading = true;
         const value = this.filters.getRawValue();
         return this.api.tenders(value.productId ?? undefined, value.status || undefined).pipe(
-          catchError(() => { this.error = 'İhaleler yüklenemedi.'; this.loading = false; return EMPTY; }),
+          catchError(() => { this.error = 'İhaleler yüklenemedi.'; if (!this.hasLoaded) this.loading = false; return EMPTY; }),
         );
       }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(result => {
       this.tenders = result.items;
       this.loading = false;
+      this.hasLoaded = true;
       this.error = '';
     });
   }

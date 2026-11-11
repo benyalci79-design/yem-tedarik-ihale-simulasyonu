@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { catchError, EMPTY } from 'rxjs';
+import { catchError, EMPTY, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../../core/api.service';
 import { NpcRule } from '../../core/models';
@@ -33,6 +33,7 @@ export class NpcRulesComponent {
     this.error = '';
     this.api.npcRules().pipe(
       catchError(() => { this.error = 'NPC kuralları yüklenemedi.'; this.loading = false; return EMPTY; }),
+      finalize(() => this.loading = false),
       takeUntilDestroyed(this.destroyRef)
     ).subscribe(result => {
       this.rules = result.items;
@@ -47,7 +48,6 @@ export class NpcRulesComponent {
           max_delivery_minutes: [rule.max_delivery_minutes, [Validators.required, Validators.min(1), Validators.max(60)]]
         });
       }
-      this.loading = false;
     });
   }
 
