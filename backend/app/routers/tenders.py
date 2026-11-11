@@ -97,6 +97,7 @@ def serialize_detail(tender: Tender, elapsed: Decimal) -> dict:
         "delivery_status": (
             "Teslim edildi" if tender.status == "DELIVERED"
             else "Bekleyen teslimat" if tender.status == "AWARDED"
+            else "Teslimat yok" if tender.status == "NO_AWARD"
             else None
         ),
     })
