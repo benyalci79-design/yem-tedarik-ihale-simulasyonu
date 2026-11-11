@@ -1,5 +1,7 @@
 from decimal import Decimal
 
+import pytest
+
 from app.simulation.evaluation import CandidateOffer, evaluate_offers
 from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
@@ -10,6 +12,7 @@ from app.simulation.rules import (
     tender_quantity_ton,
 )
 from app.simulation.timeline import TimelineEvent, ordered_events
+from app.schemas import NpcRulePatch, ProductPatch
 
 
 class FixedRng:
@@ -117,3 +120,12 @@ def test_long_tick_event_order_is_chronological_and_prioritized():
         (Decimal("10"), "close"),
         (Decimal("20"), "evaluate"),
     ]
+
+
+def test_patch_schemas_reject_null_and_excess_precision():
+    with pytest.raises(ValueError):
+        ProductPatch(current_stock_kg=None)
+    with pytest.raises(ValueError):
+        ProductPatch(current_stock_kg=Decimal("1.1234"))
+    with pytest.raises(ValueError):
+        NpcRulePatch(min_price=None)
