@@ -4,91 +4,133 @@ import { RouterLink } from '@angular/router';
 import { catchError, EMPTY, finalize, forkJoin, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService } from '../../core/api.service';
-import { Product, SimulationState } from '../../core/models';
-import { numberTr } from '../../shared/display';
+import { Product, SimulationState, TenderSummary } from '../../core/models';
+import { numberTr, statusLabel } from '../../shared/display';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [CommonModule, RouterLink],
   template: `
-    <section class="page-heading"><div><p class="eyebrow">YÖNETİCİ KONSOLU</p><h1>Simülasyon özeti</h1><p class="lede">Stok, aktif ihaleler ve simülasyon saati tek bakışta.</p></div><div class="actions"><button class="button primary" [disabled]="loading || actionLoading || simulation?.is_running" (click)="start()">{{ simulation?.is_running ? 'Simülasyon çalışıyor' : (actionLoading ? 'Başlatılıyor...' : 'Simülasyonu başlat') }}</button><button class="button ghost" [disabled]="loading || actionLoading || !simulation?.is_running" (click)="pause()">{{ actionLoading ? 'İşleniyor...' : 'Duraklat' }}</button></div></section>
+    <section class="page-heading">
+      <div><p class="eyebrow">YÖNETİCİ KONSOLU</p><h1>Simülasyon özeti</h1><p class="lede">Stoktan teslimata kadar devam eden süreci canlı izleyin.</p></div>
+      <div class="actions"><button class="button primary" [disabled]="loading || actionLoading || simulation?.is_running" (click)="start()">{{ simulation?.is_running ? 'Simülasyon çalışıyor' : (actionLoading ? 'Başlatılıyor...' : 'Simülasyonu başlat') }}</button><button class="button ghost" [disabled]="loading || actionLoading || !simulation?.is_running" (click)="pause()">{{ actionLoading ? 'İşleniyor...' : 'Duraklat' }}</button></div>
+    </section>
     <div *ngIf="error" class="alert">{{ error }} <button class="link-button" (click)="reload()">Yeniden dene</button></div>
-    <div *ngIf="loading && !simulation" class="skeleton-grid"><div class="skeleton" *ngFor="let item of [1,2,3]"></div></div>
-    <ng-container *ngIf="simulation as state"><section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ numberTr(state.elapsed_seconds, 1) }} sn</strong></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section><div *ngIf="state.last_error" class="alert">{{ state.last_error }}</div></ng-container>
-    <section class="section-heading"><div><h2>Kritik stok görünümü</h2><p>2 dakikanın altındaki kapsama vurgulanır; sıfır stok ayrıca işaretlenir.</p></div><a routerLink="/tenders" class="text-link">Tüm ihaleleri gör →</a></section>
+    <div *ngIf="loading && !simulation" class="skeleton-grid"><div class="skeleton" *ngFor="let item of [1, 2, 3]"></div></div>
+
+    <ng-container *ngIf="simulation as state">
+      <section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ numberTr(state.elapsed_seconds, 1) }} sn</strong><span class="hero-caption">{{ activityHeadline }}</span></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section>
+      <div *ngIf="state.last_error" class="alert">{{ state.last_error }}</div>
+      <section class="flow-card"><div class="section-heading"><div><h2>Canlı süreç akışı</h2><p>{{ activityDescription }}</p></div><span class="live-indicator" [class.paused]="!state.is_running"><i></i>{{ state.is_running ? 'CANLI' : 'DURAKLATILDI' }}</span></div><div class="flow-steps"><div *ngFor="let step of flowSteps; let index = index" class="flow-step" [class.done]="index < flowStep" [class.current]="index === flowStep" [class.pending]="index > flowStep"><span class="step-dot">{{ index < flowStep ? '✓' : index + 1 }}</span><strong>{{ step }}</strong><span>{{ flowStepText(index) }}</span></div></div></section>
+      <section class="summary-grid"><article><span>İzlenen ürün</span><strong>{{ products.length }}</strong><small>stok kartı</small></article><article><span>Aktif ihale</span><strong>{{ activeTenders.length }}</strong><small>şu anda işlemde</small></article><article><span>Toplam ihale</span><strong>{{ tenders.length }}</strong><small>simülasyon geçmişi</small></article></section>
+      <section class="activity-layout"><div class="activity-card"><div class="section-heading"><div><h2>Son hareketler</h2><p>İhale durumları otomatik olarak güncellenir.</p></div><a routerLink="/tenders" class="text-link">Tümünü gör →</a></div><div *ngIf="recentActivities.length; else noActivity" class="activity-list"><a *ngFor="let activity of recentActivities" class="activity-row" [routerLink]="['/tenders', activity.tender.id]"><span class="activity-icon" [class]="activity.tender.status.toLowerCase()">{{ activity.icon }}</span><span><strong>{{ activity.tender.product_name }} · {{ activity.tender.code }}</strong><small>{{ activity.label }} · {{ numberTr(activity.tender.opened_at_seconds, 1) }} sn'de açıldı</small></span><b>→</b></a></div><ng-template #noActivity><div class="activity-empty">{{ state.is_running ? 'Stok seviyeleri izleniyor; kritik kapsama ulaşınca ilk ihale burada görünecek.' : 'Simülasyonu başlattığınızda süreç hareketleri burada görünecek.' }}</div></ng-template></div><div class="next-card"><span class="eyebrow">SİSTEMİN SIRADAKİ ADIMI</span><strong>{{ nextStep }}</strong><p>{{ nextStepDescription }}</p><a routerLink="/products" class="text-link">Stok ayarlarını incele →</a></div></section>
+    </ng-container>
+
+    <section class="section-heading stock-heading"><div><h2>Kritik stok görünümü</h2><p>2 dakikanın altındaki kapsama vurgulanır; sıfır stok ayrıca işaretlenir.</p></div><a routerLink="/tenders" class="text-link">Tüm ihaleleri gör →</a></section>
     <div class="product-grid" *ngIf="products.length; else emptyProducts"><article class="product-card" *ngFor="let product of products" [class.critical]="Number(product.coverage_minutes) < 2" [class.empty]="Number(product.current_stock_kg) === 0"><div class="card-top"><div><span class="code-label">{{ product.code }}</span><h3>{{ product.name }}</h3></div><span *ngIf="Number(product.current_stock_kg) === 0" class="warning-pill">! Stok tükendi</span><span *ngIf="Number(product.current_stock_kg) > 0 && Number(product.coverage_minutes) < 2" class="warning-pill">! Kritik kapsam</span></div><div class="metric-row"><div><span>Mevcut stok</span><strong>{{ numberTr(product.current_stock_kg, 0) }} kg</strong></div><div><span>Kapsama</span><strong>{{ numberTr(product.coverage_minutes, 1) }} dk</strong></div></div><div class="card-foot"><span>{{ numberTr(product.consumption_kg_per_min, 0) }} kg/dk tüketim</span><a *ngIf="product.active_tenders.length" [routerLink]="['/tenders', product.active_tenders[0].id]" class="text-link">{{ product.active_tenders.length }} aktif ihale →</a><span *ngIf="!product.active_tenders.length" class="muted">Aktif ihale yok</span></div></article></div>
     <ng-template #emptyProducts><div class="empty-state"><strong>Henüz ürün verisi yok</strong><span>Seed tamamlandığında ürün kartları burada görünecek.</span></div></ng-template>
   `,
-  styles: ['.page-heading,.section-heading,.card-top,.card-foot,.hero-status,.actions,.metric-row{display:flex;align-items:center;justify-content:space-between;gap:1rem}.page-heading{margin-bottom:2rem;align-items:flex-end}.eyebrow,.code-label{color:#1d4ed8;font-size:.78rem;font-weight:800;letter-spacing:.08em}.page-heading h1{margin:.3rem 0;font-size:clamp(2rem,4vw,3rem);color:#111827}.lede,.section-heading p{margin:.35rem 0 0;color:#4b5563}.button{border:0;border-radius:.7rem;padding:.8rem 1.1rem;font-weight:750;cursor:pointer}.primary{color:#fff;background:#1d4ed8}.ghost{color:#1e3a8a;background:#dbeafe}.hero-status{padding:1.25rem 1.5rem;background:#111827;color:#fff;border-radius:1rem;margin-bottom:2rem}.hero-status strong{display:block;font-size:2rem;margin-top:.25rem;color:#fff}.hero-status .eyebrow{color:#bfdbfe}.run-state{padding:.55rem .8rem;background:#374151;border-radius:999px;font-weight:750}.run-state.running{background:#047857}.section-heading{margin-bottom:1rem}.section-heading h2{margin:0;color:#111827}.text-link{color:#1d4ed8;font-weight:750;text-decoration:none}.product-grid,.skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem}.product-card{min-height:210px;padding:1.25rem;background:#fff;border:1px solid #cbd5e1;border-radius:1rem}.product-card.critical{border:2px solid #e11d48;background:#fff1f2}.product-card h3{margin:.3rem 0 0;color:#111827;font-size:1.3rem}.warning-pill{color:#9f1239;background:#fecdd3;border-radius:999px;padding:.3rem .55rem;font-size:.8rem;font-weight:800}.metric-row{margin:2rem 0 1.2rem;justify-content:flex-start;gap:2.5rem}.metric-row div{display:grid;gap:.35rem}.metric-row span,.card-foot,.muted{color:#4b5563}.metric-row strong{color:#111827;font-size:1.65rem}.card-foot{border-top:1px solid #e5e7eb;padding-top:.9rem;font-size:.9rem}.alert{padding:.9rem 1rem;border-radius:.7rem;margin-bottom:1rem;color:#991b1b;background:#fee2e2;border:1px solid #fca5a5}.link-button{border:0;background:transparent;color:#991b1b;text-decoration:underline;cursor:pointer}.skeleton{height:210px;border-radius:1rem;background:#e5e7eb}.empty-state{display:grid;gap:.35rem;padding:2rem;text-align:center;background:#fff;border:1px dashed #64748b;border-radius:1rem;color:#334155}.empty-state strong{color:#111827;font-size:1.1rem}@media(max-width:800px){.product-grid,.skeleton-grid{grid-template-columns:1fr}.page-heading,.section-heading{align-items:flex-start;flex-direction:column}.actions{width:100%}}']
+  styleUrl: './dashboard.component.css',
 })
 export class DashboardComponent {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
   simulation: SimulationState | null = null;
   products: Product[] = [];
+  tenders: TenderSummary[] = [];
   loading = true;
   actionLoading = false;
   error = '';
   readonly Number = Number;
   readonly numberTr = numberTr;
+  readonly flowSteps = ['Simülasyon', 'Stok analizi', 'İhale açılışı', 'Değerlendirme', 'Teslimat'];
 
   constructor() { this.startPolling(); }
 
+  get activeTenders(): TenderSummary[] { return this.tenders.filter(tender => ['OPEN', 'EVALUATION', 'AWARDED'].includes(tender.status)); }
+
+  get recentActivities(): { tender: TenderSummary; label: string; icon: string }[] {
+    return this.tenders.slice(0, 5).map(tender => ({
+      tender,
+      label: statusLabel(tender.status),
+      icon: tender.status === 'DELIVERED' ? '✓' : tender.status === 'NO_AWARD' ? '—' : tender.status === 'AWARDED' ? '◆' : tender.status === 'EVALUATION' ? '◐' : '●',
+    }));
+  }
+
+  get flowStep(): number {
+    if (!this.simulation) return 0;
+    if (this.tenders.some(tender => tender.status === 'AWARDED')) return 4;
+    if (this.tenders.some(tender => tender.status === 'EVALUATION')) return 3;
+    if (this.tenders.some(tender => tender.status === 'OPEN')) return 2;
+    return this.simulation.is_running ? 1 : 0;
+  }
+
+  get activityHeadline(): string {
+    if (this.activeTenders.some(tender => tender.status === 'EVALUATION')) return 'Teklifler değerlendiriliyor';
+    if (this.activeTenders.some(tender => tender.status === 'OPEN')) return 'Açık ihalelerde teklif toplanıyor';
+    if (this.activeTenders.some(tender => tender.status === 'AWARDED')) return 'Kazanan teklif için teslimat bekleniyor';
+    if (this.simulation?.is_running) return 'Stoklar ve kritik kapsama izleniyor';
+    return this.simulation?.elapsed_seconds !== '0.000' ? 'Akış duraklatıldı' : 'Akış başlatılmayı bekliyor';
+  }
+
+  get activityDescription(): string {
+    if (this.activeTenders.length) return `${this.activeTenders.length} ihale arka planda ilerliyor; durumlar iki saniyede bir yenileniyor.`;
+    return this.simulation?.is_running ? 'Motor ürün stoklarını izliyor ve ihtiyaç oluştuğunda ihaleyi otomatik açacak.' : 'Başlat düğmesine bastığınızda simülasyon saati ve otomatik ihale akışı başlayacak.';
+  }
+
+  get nextStep(): string {
+    if (!this.simulation?.is_running) return 'Simülasyonu başlatın';
+    if (this.activeTenders.some(tender => tender.status === 'EVALUATION')) return 'Teklif sonucu oluşacak';
+    if (this.activeTenders.some(tender => tender.status === 'OPEN')) return 'NPC teklifleri bekleniyor';
+    if (this.activeTenders.some(tender => tender.status === 'AWARDED')) return 'Teslimat zamanı bekleniyor';
+    return 'Kritik stok seviyesi bekleniyor';
+  }
+
+  get nextStepDescription(): string {
+    if (!this.simulation?.is_running) return 'Akışı başlattığınızda sistem stokları otomatik izlemeye başlayacak.';
+    if (this.activeTenders.length) return 'İhale zamanlayıcısı ilerliyor; yeni gelişmeler son hareketler alanına düşecek.';
+    return 'Kritik kapsama ulaşıldığında ürün için yeni ihale otomatik oluşturulur.';
+  }
+
+  flowStepText(index: number): string {
+    if (index < this.flowStep) return 'Tamamlandı';
+    if (index === this.flowStep) return index === 0 && !this.simulation?.is_running ? 'Bekliyor' : 'Şu an';
+    return 'Sırada';
+  }
+
   reload(): void {
     this.loading = true;
-    this.loadSnapshot().subscribe({
-      next: snapshot => this.applySnapshot(snapshot),
-      error: () => this.showLoadError(),
-    });
+    this.loadSnapshot().subscribe({ next: snapshot => this.applySnapshot(snapshot), error: () => this.showLoadError() });
   }
 
   start(): void {
     if (this.actionLoading || this.loading || this.simulation?.is_running) return;
     this.actionLoading = true;
     this.error = '';
-    this.api.startSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({
-      next: state => {
-        this.simulation = state;
-        this.loading = false;
-      },
-      error: () => this.error = 'Simülasyon başlatılamadı. Backend bağlantısını kontrol edin.',
-    });
+    this.api.startSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.simulation = state; this.loading = false; }, error: () => this.error = 'Simülasyon başlatılamadı. Backend bağlantısını kontrol edin.' });
   }
 
   pause(): void {
     if (this.actionLoading || this.loading || !this.simulation?.is_running) return;
     this.actionLoading = true;
     this.error = '';
-    this.api.pauseSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({
-      next: state => {
-        this.simulation = state;
-        this.loading = false;
-      },
-      error: () => this.error = 'Simülasyon duraklatılamadı. Backend bağlantısını kontrol edin.',
-    });
+    this.api.pauseSimulation().pipe(finalize(() => this.actionLoading = false)).subscribe({ next: state => { this.simulation = state; this.loading = false; }, error: () => this.error = 'Simülasyon duraklatılamadı. Backend bağlantısını kontrol edin.' });
   }
 
   private startPolling(): void {
-    timer(0, 2000).pipe(
-      switchMap(() => this.loadSnapshot().pipe(catchError(() => { this.showLoadError(); return EMPTY; }))),
-      takeUntilDestroyed(this.destroyRef),
-    ).subscribe(snapshot => this.applySnapshot(snapshot));
+    timer(0, 2000).pipe(switchMap(() => this.loadSnapshot().pipe(catchError(() => { this.showLoadError(); return EMPTY; }))), takeUntilDestroyed(this.destroyRef)).subscribe(snapshot => this.applySnapshot(snapshot));
   }
 
-  private loadSnapshot() {
-    return forkJoin({ simulation: this.api.simulation(), products: this.api.products() });
-  }
+  private loadSnapshot() { return forkJoin({ simulation: this.api.simulation(), products: this.api.products(), tenders: this.api.tenders() }); }
 
-  private applySnapshot(snapshot: { simulation: SimulationState; products: { items: Product[] } }): void {
+  private applySnapshot(snapshot: { simulation: SimulationState; products: { items: Product[] }; tenders: { items: TenderSummary[] } }): void {
     this.simulation = snapshot.simulation;
     this.products = snapshot.products.items;
+    this.tenders = snapshot.tenders.items;
     this.loading = false;
     this.error = '';
   }
 
-  private showLoadError(): void {
-    this.error = 'Backend bağlantısını kontrol edin.';
-    this.loading = false;
-  }
+  private showLoadError(): void { this.error = 'Backend bağlantısını kontrol edin.'; this.loading = false; }
 }
