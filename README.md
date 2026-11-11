@@ -58,7 +58,8 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 
 - Teslim maliyeti: `landed_cost_tl = quantity_kg/1000 * (NPC TL/ton + nakliyeci TL/ton)`.
 - Ortalama maliyet: `(stok*ortalama + eklenen_toplam_maliyet) / (stok + eklenen_kg)`, 6 basamak.
-- Stok değeri: `stok * ortalama maliyet`.
+- **Son alım birim fiyatı:** her teslimatta `landed_cost_tl / quantity_kg` olarak ayrıca saklanır (`products.last_purchase_unit_price`). Stok sıfıra düşse bile bu alan ve ortalama maliyet **korunur**; birim fiyat 0'a inmez. Depo tamamen boşken toplam birim fiyat, ürünlerin son bilinen birim fiyatlarının ortalaması olarak gösterilir.
+- Stok değeri: `stok * ortalama maliyet` (stok yoksa 0 TL; fiyat bilgisi ayrı alanda korunur).
 - Her tick sonunda ve her teslimattan hemen sonra tüm ürünler için **aynı `elapsed_seconds`** ile `stock_snapshots` satırı yazılır. Ürün başına yaklaşık 3000 nokta tutulur; daha eskiler seyrek bir DELETE ile silinir. `GET /stock-metrics/history?limit=300` noktaları eşit aralıklı örnekler.
 
 ## API özeti
@@ -67,7 +68,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 
 - `GET /health`
 - `GET|POST /simulation`, `/simulation/start`, `/simulation/pause`, `/simulation/speed`
-- `GET /products`, `PATCH /products/{id}` (kapasite ve ortalama maliyet dahil)
+- `GET /products`, `PATCH /products/{id}` (kapasite, ortalama maliyet ve son alım birim fiyatı dahil)
 - `GET /npc-rules?product_id=`, `PATCH /npc-rules/{id}` (nakliye modu, mevcut miktar aralığı dahil)
 - `GET /tenders?product_id=&status=`, `POST /tenders`
 - `GET /tenders/{id}`, `POST /tenders/{id}/accept`, `POST /tenders/{id}/finalize`
@@ -122,7 +123,7 @@ Test kapsamı: tüketim, negatif stok koruması, kapsama, yukarı yuvarlama, ola
 - `/products`: Ürün Ayarları — stok, tüketim, eşikler, teklif penceresi, **depo kapasitesi**, **ortalama maliyet**, doluluk göstergesi.
 - `/npc-rules`: NPC Kuralları — davet, olasılık, fiyat, teslim, **nakliye dahil/hariç**, **mevcut miktar aralığı**; ürün filtresi.
 - `/tenders`: İhale Listesi — **yeni ihale açma paneli** (önerilen miktar ve boş kapasite ile), filtreler, kabul özeti.
-- `/tenders/:id`: İhale Detayı — gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, "İhaleyi tamamla", teslimat/award listesi.
+- `/tenders/:id`: İhale Detayı — üstte **kompakt stok şeridi** (depo doluluğu, yoldaki miktar, boş kapasite, **son alım birim fiyatı**, ortalama maliyet), gizli teklifler, **teklif kabul tablosu (kısmi miktar)**, "İhaleyi tamamla", teslimat/award listesi.
 - `/shipping`: Nakliye — nakliyeci bekleyenler, nakliyeci seçimi ve maliyet/teslim önizlemesi, yoldakiler ve teslim edilenler, nakliyeci listesi.
 
 Üst bardaki ortak hız çubuğu (**Dur · 0,5x · 1x · 2x · 3x**) ve simülasyon saati tüm ekranlarda görünür. Tekliflerin açık ihalede gizliliği CSS ile değil, API veri modeliyle sağlanır.
@@ -148,6 +149,7 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 8. **PASS** — Maliyet: teslimat sonrası ortalama maliyet 13,00 → 12,084493 TL/kg düştü, stok değeri arttı; `/stock-metrics/history` noktaları üretildi.
 9. **PASS** — Testler/derleme: `pytest -q` 19 passed; `npm test` (üretim derlemesi) başarılı; 6 route headless Chrome'da hatasız render edildi.
 10. **PASS** — Migration: dolu veritabanında `alembic upgrade head` çalıştı; backfill (kapasite/maliyet) uygulandı, veri kaybı olmadı.
+11. **PASS** — Birim fiyat korunması: stok 0 iken MISR `avg_cost_per_kg=8.360075` ve `last_purchase_unit_price=8.360075` döndü (0 değil); 1.000 kg teslim alınınca ikisi de 9,060270 oldu; depo boşken toplam birim fiyat `_last_known_avg` ile korunuyor (birim testi).
 
 ## Veri kalıcılığı
 

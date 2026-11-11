@@ -22,6 +22,10 @@ class Product(Base):
     # Depo sınırı ve stoktaki ürünün ağırlıklı ortalama birim maliyeti (TL/kg).
     capacity_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="10000.000")
     avg_cost_per_kg: Mapped[Decimal] = mapped_column(DECIMAL(14, 6), nullable=False, server_default="0")
+    # En son teslim alınan malın birim maliyeti; stok 0 olsa da korunur.
+    last_purchase_unit_price: Mapped[Decimal] = mapped_column(
+        DECIMAL(14, 6), nullable=False, server_default="0"
+    )
     # Kullanılmıyor: otomatik ihale akışı kaldırıldı. Sütun geriye dönük uyumluluk için duruyor.
     next_eligible_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, default=0)
 

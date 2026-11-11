@@ -94,6 +94,7 @@ def main() -> None:
                     offer_window_seconds=window,
                     capacity_kg=capacity,
                     avg_cost_per_kg=avg_cost,
+                    last_purchase_unit_price=avg_cost,
                     next_eligible_at_seconds=Decimal("0"),
                 )
                 db.add(product)

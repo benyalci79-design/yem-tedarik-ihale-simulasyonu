@@ -123,6 +123,11 @@ def _base_tender(db: Session, tender: Tender, elapsed: Decimal) -> dict:
         "accepted_total_kg": _kg(accepted_total),
         "remaining_need_kg": _kg(remaining),
         "free_capacity_kg": _kg(free_capacity(db, tender.product)),
+        # İhale ekranında yeni alım kararı için ürünün anlık stok/fiyat özeti.
+        "product_stock_kg": str(tender.product.current_stock_kg),
+        "product_capacity_kg": str(tender.product.capacity_kg),
+        "product_avg_cost_per_kg": str(tender.product.avg_cost_per_kg),
+        "product_last_purchase_unit_price": str(tender.product.last_purchase_unit_price),
         "result_reason": tender.result_reason,
         "awards": [_serialize_award(award, elapsed) for award in awards],
     }

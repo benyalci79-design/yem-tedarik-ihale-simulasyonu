@@ -47,6 +47,7 @@ import { numberTr } from '../../shared/display';
           <div class="current-values">
             <span>Kapsama: <strong>{{ numberTr(product.coverage_minutes, 1) }} dk</strong></span>
             <span>Önerilen ihale: <strong>{{ numberTr(product.suggested_quantity_ton, 3) }} ton</strong></span>
+            <span>Son alım: <strong>{{ numberTr(product.last_purchase_unit_price, 2) }} TL/kg</strong></span>
           </div>
           <div class="form-actions">
             <span class="form-error" *ngIf="formError[product.id]">{{ formError[product.id] }}</span>

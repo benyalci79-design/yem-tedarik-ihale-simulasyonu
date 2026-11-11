@@ -25,6 +25,7 @@ INCOMING_STATUSES = ("AWAITING_CARRIER", "IN_TRANSIT")
 ZERO = Decimal("0")
 THOUSANDTH = Decimal("0.001")
 FOUR_PLACES = Decimal("0.0001")
+SIX_PLACES = Decimal("0.000001")
 # Zaman serisi grafiği için ürün başına tutulan en fazla nokta sayısı.
 SNAPSHOT_RETENTION = 3000
 SNAPSHOT_PRUNE_EVERY = 30
@@ -271,13 +272,19 @@ class SimulationEngine:
 
         stock_before = Decimal(product.current_stock_kg)
         quantity = Decimal(award.quantity_kg)
+        landed_cost = Decimal(award.landed_cost_tl or ZERO)
         product.current_stock_kg = stock_before + quantity
         product.avg_cost_per_kg = weighted_average_cost(
             stock_before,
             Decimal(product.avg_cost_per_kg),
             quantity,
-            Decimal(award.landed_cost_tl or ZERO),
+            landed_cost,
         )
+        if quantity > ZERO:
+            # "En son kaçtan aldık" bilgisi; stok tükense de korunur.
+            product.last_purchase_unit_price = (landed_cost / quantity).quantize(
+                SIX_PLACES, rounding=ROUND_HALF_UP
+            )
         award.delivered_at_seconds = event_time
         award.status = "DELIVERED"
         self._complete_tender_if_delivered(db, tender, event_time)

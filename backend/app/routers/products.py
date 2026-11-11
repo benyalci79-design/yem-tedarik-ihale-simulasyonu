@@ -52,6 +52,7 @@ def serialize_product(db: Session, product: Product) -> dict:
         "offer_window_seconds": product.offer_window_seconds,
         "capacity_kg": str(product.capacity_kg),
         "avg_cost_per_kg": str(product.avg_cost_per_kg),
+        "last_purchase_unit_price": str(product.last_purchase_unit_price),
         "incoming_kg": str(incoming_kg(db, product.id)),
         "free_capacity_kg": str(free_capacity(db, product)),
         "stock_value_tl": str((stock * avg_cost).quantize(Decimal("0.01"))),

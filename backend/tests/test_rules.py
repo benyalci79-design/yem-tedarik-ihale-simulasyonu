@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from app.routers.metrics import _last_known_avg
 from app.simulation.npc import generate_offer, schedule_response
 from app.simulation.rules import (
     can_deliver_award,
@@ -129,6 +130,8 @@ def test_weighted_average_cost():
     assert weighted_average_cost(Decimal("1000"), Decimal("8"), Decimal("1000"), Decimal("9000")) == Decimal(
         "8.500000"
     )
+    # Stok ve eklenen miktar yoksa son bilinen birim maliyet korunur (0'a düşmez).
+    assert weighted_average_cost(Decimal("0"), Decimal("9.5"), Decimal("0"), Decimal("0")) == Decimal("9.5")
     assert weighted_average_cost(Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0")) == Decimal("0")
 
 
@@ -141,6 +144,13 @@ def test_delivery_due_with_carrier_waits_for_assignment():
     assert delivery_due_seconds(Decimal("100"), 1, Decimal("300"), 2) == Decimal("420.000")
     # Nakliyeci hazırlıktan önce atanırsa hazırlık bitişi belirleyicidir: 400 + 120.
     assert delivery_due_seconds(Decimal("100"), 5, Decimal("150"), 2) == Decimal("520.000")
+
+
+def test_total_unit_price_is_preserved_when_stock_is_zero():
+    # Depo tamamen boşken toplam birim fiyat 0'a düşmez; son bilinen fiyatların
+    # ortalaması gösterilir.
+    assert _last_known_avg([Decimal("8"), Decimal("10")]) == Decimal("9.000000")
+    assert _last_known_avg([]) == Decimal("0")
 
 
 def test_award_delivery_is_idempotent():

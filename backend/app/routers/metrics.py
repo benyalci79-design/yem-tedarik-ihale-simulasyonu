@@ -20,6 +20,16 @@ def _avg(total_value: Decimal, total_stock: Decimal) -> Decimal:
     return (total_value / total_stock).quantize(SIX_PLACES)
 
 
+def _last_known_avg(costs: list[Decimal]) -> Decimal:
+    """Depo tamamen boşken toplam birim fiyat, son bilinen fiyatların ortalamasıdır.
+
+    Böylece stok 0'a düşünce gösterge 0 TL/kg'a inmez; fiyat bilgisi korunur.
+    """
+    if not costs:
+        return ZERO
+    return (sum(costs, ZERO) / Decimal(len(costs))).quantize(SIX_PLACES)
+
+
 @router.get("")
 def stock_metrics(db: Session = Depends(get_db)) -> dict:
     products = db.scalars(select(Product).order_by(Product.id)).all()
@@ -39,6 +49,7 @@ def stock_metrics(db: Session = Depends(get_db)) -> dict:
                 "product_name": product.name,
                 "stock_kg": str(stock),
                 "avg_cost_per_kg": str(avg_cost.quantize(SIX_PLACES)),
+                "last_purchase_unit_price": str(Decimal(product.last_purchase_unit_price)),
                 "value_tl": str(value),
             }
         )
@@ -46,7 +57,11 @@ def stock_metrics(db: Session = Depends(get_db)) -> dict:
         "items": items,
         "total_stock_kg": str(total_stock),
         "total_value_tl": str(total_value.quantize(TWO_PLACES)),
-        "total_avg_cost_per_kg": str(_avg(total_value, total_stock)),
+        "total_avg_cost_per_kg": str(
+            _avg(total_value, total_stock)
+            if total_stock > ZERO
+            else _last_known_avg([Decimal(product.avg_cost_per_kg) for product in products])
+        ),
     }
 
 
@@ -73,12 +88,15 @@ def stock_history(limit: int = Query(default=300, ge=2, le=3000), db: Session = 
         products = grouped[stamp]
         total_stock = sum((Decimal(row.stock_kg) for row in products), ZERO)
         total_value = sum((Decimal(row.value_tl) for row in products), ZERO)
+        prices = [Decimal(row.avg_cost_per_kg) for row in products]
         points.append(
             {
                 "elapsed_seconds": str(stamp),
                 "total_stock_kg": str(total_stock),
                 "total_value_tl": str(total_value.quantize(TWO_PLACES)),
-                "total_avg_cost_per_kg": str(_avg(total_value, total_stock)),
+                "total_avg_cost_per_kg": str(
+                    _avg(total_value, total_stock) if total_stock > ZERO else _last_known_avg(prices)
+                ),
                 "products": [
                     {
                         "product_id": row.product_id,

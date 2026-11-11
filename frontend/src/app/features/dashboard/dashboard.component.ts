@@ -51,12 +51,12 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
           <span class="code-label">{{ item.product_code ?? item.product_name }}</span>
           <strong>{{ numberTr(item.value_tl, 0) }} TL</strong>
           <div class="cost-meta"><span>{{ numberTr(item.stock_kg, 0) }} kg</span><span>{{ numberTr(item.avg_cost_per_kg, 2) }} TL/kg</span></div>
+          <small class="last-buy">Son alım {{ numberTr(item.last_purchase_unit_price ?? 0, 2) }} TL/kg</small>
         </article>
         <article class="cost-card total" *ngIf="metrics">
           <span class="code-label">TOPLAM</span>
           <strong>{{ numberTr(metrics.total_value_tl, 0) }} TL</strong>
-          <div class="cost-meta"><span>{{ numberTr(metrics.total_stock_kg, 0) }} kg</span><span>{{ numberTr(metrics.total_avg_cost_per_kg, 2) }} TL/kg</span></div>
-        </article>
+          <div class="cost-meta"><span>{{ numberTr(metrics.total_stock_kg, 0) }} kg</span><span>{{ numberTr(metrics.total_avg_cost_per_kg, 2) }} TL/kg</span></div>        </article>
       </div>
 
       <div class="chart-grid">

@@ -85,11 +85,12 @@ def weighted_average_cost(
     """Teslimattan sonra stoktaki ürünün ağırlıklı ortalama birim maliyeti.
 
     Tüketim ortalama maliyeti değiştirmez; bu fonksiyon yalnızca stok eklenirken
-    çağrılır. Toplam miktar sıfırsa maliyet tanımsızdır, 0 döner.
+    çağrılır. Toplam miktar sıfırsa (stok ve eklenen miktar yoksa) son bilinen
+    birim maliyet korunur; böylece stok bitince fiyat 0'a düşmez.
     """
     total_kg = stock_kg + added_kg
     if total_kg <= ZERO:
-        return ZERO
+        return avg_cost_per_kg
     total_value = stock_kg * avg_cost_per_kg + added_total_cost_tl
     return (total_value / total_kg).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)
 

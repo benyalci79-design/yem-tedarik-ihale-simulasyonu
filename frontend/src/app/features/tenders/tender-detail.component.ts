@@ -26,6 +26,19 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
         <app-status-badge [status]="item.status"></app-status-badge>
       </section>
 
+      <section class="stock-strip" aria-label="Ürün stok ve maliyet özeti">
+        <span class="strip-title">Depo</span>
+        <span><b>{{ numberTr(item.product_stock_kg, 0) }}</b> / {{ numberTr(item.product_capacity_kg, 0) }} kg</span>
+        <span class="sep">·</span>
+        <span>Yolda <b>{{ numberTr(incomingKg(item), 0) }}</b> kg</span>
+        <span class="sep">·</span>
+        <span>Boş <b>{{ numberTr(item.free_capacity_kg, 0) }}</b> kg</span>
+        <span class="sep">·</span>
+        <span class="buy">Son alım <b>{{ numberTr(item.product_last_purchase_unit_price, 2) }} TL/kg</b></span>
+        <span class="sep">·</span>
+        <span>Ortalama <b>{{ numberTr(item.product_avg_cost_per_kg, 2) }} TL/kg</b></span>
+      </section>
+
       <section class="need-grid">
         <article><span>İhtiyaç</span><strong>{{ numberTr(item.quantity_ton, 3) }} ton</strong></article>
         <article><span>Kabul edilen</span><strong>{{ numberTr(item.accepted_total_kg, 0) }} kg</strong></article>
@@ -120,7 +133,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; margin-bottom:1.5rem; }',
     '.eyebrow { color:#1d4ed8; font-size:.78rem; font-weight:800; letter-spacing:.08em; }.page-heading h1 { margin:.3rem 0; color:#111827; font-size:2.2rem; }.lede { color:#4b5563; }',
     '.need-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; margin-bottom:1.2rem; }',
-    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
+    '.stock-strip { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; padding:.55rem .85rem; margin-bottom:.9rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:.65rem; color:#334155; font-size:.85rem; }',
+    '.stock-strip b { color:#111827; font-variant-numeric:tabular-nums; }.stock-strip .sep { color:#94a3b8; }.stock-strip .strip-title { font-weight:800; color:#1d4ed8; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }.stock-strip .buy b { color:#1d4ed8; }',    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
     '.reason { padding:.8rem 1rem; background:#f1f5f9; border-left:4px solid #1d4ed8; border-radius:.5rem; color:#172033; }',
     '.card { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; padding:1.2rem; margin-bottom:1.2rem; }',
     '.card-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:.8rem; }.card-head h2 { margin:0; color:#111827; }.live { color:#047857; font-weight:800; font-size:.8rem; letter-spacing:.06em; }',
@@ -179,6 +193,14 @@ export class TenderDetailComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((tender) => this.apply(tender));
+  }
+
+  incomingKg(tender: TenderDetail): number {
+    // Boş kapasite = kapasite - stok - yoldaki; yoldaki miktarı buradan türetiyoruz.
+    return Math.max(
+      0,
+      Number(tender.product_capacity_kg) - Number(tender.product_stock_kg) - Number(tender.free_capacity_kg),
+    );
   }
 
   canAccept(offer: TenderOffer): boolean {

@@ -22,6 +22,7 @@ export interface Product {
   offer_window_seconds: number;
   capacity_kg: string;
   avg_cost_per_kg: string;
+  last_purchase_unit_price: string;
   incoming_kg: string;
   free_capacity_kg: string;
   stock_value_tl: string;
@@ -102,6 +103,10 @@ export interface TenderSummary {
   accepted_total_kg: string;
   remaining_need_kg: string;
   free_capacity_kg: string;
+  product_stock_kg: string;
+  product_capacity_kg: string;
+  product_avg_cost_per_kg: string;
+  product_last_purchase_unit_price: string;
   result_reason: string | null;
   awards: TenderAward[];
 }
@@ -155,6 +160,7 @@ export interface StockMetricItem {
   product_name: string;
   stock_kg: string;
   avg_cost_per_kg: string;
+  last_purchase_unit_price?: string;
   value_tl: string;
 }
 

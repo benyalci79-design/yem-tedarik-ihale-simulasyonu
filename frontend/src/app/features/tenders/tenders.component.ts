@@ -35,7 +35,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
       </form>
       <p class="hint" *ngIf="selectedProduct">
         Stok {{ numberTr(selectedProduct.current_stock_kg, 0) }} kg · Yolda {{ numberTr(selectedProduct.incoming_kg, 0) }} kg ·
-        Boş kapasite {{ numberTr(selectedProduct.free_capacity_kg, 0) }} kg
+        Boş kapasite {{ numberTr(selectedProduct.free_capacity_kg, 0) }} kg ·
+        <b>Son alım {{ numberTr(selectedProduct.last_purchase_unit_price, 2) }} TL/kg</b>
       </p>
       <p class="error" *ngIf="hasActiveTender">Bu üründe açık bir ihale veya süren teslimat var; önce onu tamamlayın.</p>
       <p class="error" *ngIf="createError">{{ createError }}</p>
