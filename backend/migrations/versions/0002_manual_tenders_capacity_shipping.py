@@ -8,13 +8,10 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.mysql import BIGINT, DATETIME
 
 revision = "0002_manual_capacity_shipping"
-# Not: Alembic'in varsayılan alembic_version.version_num sütunu 32 karakterdir;
-# bu yüzden revision kimliği dosya adından kısadır.
 down_revision = "0001_initial_schema"
 branch_labels = None
 depends_on = None
 
-# Faz 1'deki backfill değerleri: depo kapasitesi (kg) ve TL/kg ortalama maliyet.
 PRODUCT_BACKFILL = {
     "MISR": ("5000.000", "8.750000"),
     "ARPA": ("4000.000", "7.750000"),
@@ -72,7 +69,6 @@ def upgrade() -> None:
         sa.Column("accepted_quantity_kg", sa.Numeric(16, 3), nullable=False, server_default="0"),
     )
 
-    # Veri kaybı yok: mevcut ürünler koda göre gerçekçi kapasite/maliyet değerleri alır.
     for code, (capacity, avg_cost) in PRODUCT_BACKFILL.items():
         op.execute(
             sa.text(

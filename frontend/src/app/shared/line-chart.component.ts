@@ -3,12 +3,6 @@ import { Component, Input } from '@angular/core';
 import { ChartSeries } from '../core/models';
 import { numberTr } from './display';
 
-/**
- * Bağımlılıksız SVG çizgi grafiği.
- * - Seriler renk + çizgi deseni + işaretçi şekli ile ayrılır (renk körlüğüne dayanıklı).
- * - Efsaneye tıklayınca seri açılıp kapanır.
- * - Fare üzerindeyken aynı anda tüm serilerin değeri ipucunda gösterilir.
- */
 @Component({
   selector: 'app-line-chart',
   standalone: true,
@@ -197,7 +191,6 @@ export class LineChartComponent {
     }
     const span = max - min;
     const margin = span * 0.08;
-    // Negatif olmayan serilerde eksen 0'ın altına inmesin (maliyet/miktar).
     return { min: min >= 0 ? Math.max(0, min - margin) : min - margin, max: max + margin };
   }
 

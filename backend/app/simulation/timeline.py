@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from decimal import Decimal
 
-# Otomatik değerlendirme kaldırıldı; karar kullanıcıya ait. Teslimat her zaman
-# diğer olaylardan önce işlenir, ardından NPC cevabı ve ihale kapanışı gelir.
 EVENT_PRIORITY = {
     "delivery": 0,
     "response": 2,

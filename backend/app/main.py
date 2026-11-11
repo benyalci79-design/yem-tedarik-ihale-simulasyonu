@@ -56,7 +56,7 @@ def health() -> dict[str, str]:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
         return {"status": "ok"}
-    except Exception as exc:  # SQL/stack trace istemciye sızdırılmaz.
+    except Exception as exc:
         raise HTTPException(
             status_code=503,
             detail={"error": {"code": "DB_UNAVAILABLE", "message": "Veritabanı hazır değil."}},

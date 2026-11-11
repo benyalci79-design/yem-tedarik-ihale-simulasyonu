@@ -27,7 +27,6 @@ ZERO = Decimal("0")
 THOUSANDTH = Decimal("0.001")
 FOUR_PLACES = Decimal("0.0001")
 SIX_PLACES = Decimal("0.000001")
-# Zaman serisi grafiği için ürün başına tutulan en fazla nokta sayısı.
 SNAPSHOT_RETENTION = 3000
 SNAPSHOT_PRUNE_EVERY = 30
 
@@ -124,8 +123,6 @@ class SimulationEngine:
         """
         with self._lock, self.session_factory.begin() as db:
             state = db.get(SimulationState, 1, with_for_update=True)
-            # FK sırası: önce award'lar, sonra teklifin kazanan işaretçisi,
-            # ardından katılımlar ve ihaleler.
             db.execute(update(Tender).values(winning_participation_id=None))
             db.execute(delete(TenderAward))
             db.execute(delete(TenderParticipation))
@@ -219,7 +216,6 @@ class SimulationEngine:
         if elapsed_seconds <= ZERO:
             return
         for product in db.scalars(select(Product).order_by(Product.id)).all():
-            # Tüketim yalnızca stoğu düşürür; ortalama birim maliyet değişmez.
             product.current_stock_kg = consume_stock(
                 Decimal(product.current_stock_kg),
                 Decimal(product.consumption_kg_per_min),
@@ -262,7 +258,6 @@ class SimulationEngine:
         elif kind == "close":
             tender = db.get(Tender, object_id, with_for_update=True)
             if tender is not None and tender.status == "OPEN":
-                # Karar kullanıcıya aittir; motor burada durur.
                 tender.status = "EVALUATION"
 
     def _submit_offer(self, db, participation: TenderParticipation, event_time: Decimal) -> None:
@@ -313,8 +308,6 @@ class SimulationEngine:
             landed_cost,
         )
         if quantity > ZERO:
-            # "En son kaçtan aldık" bilgisi mal fiyatıdır (TL/kg, nakliye hariç);
-            # stok tükense de korunur.
             product.last_purchase_unit_price = (
                 Decimal(award.unit_price_per_ton) / Decimal("1000")
             ).quantize(SIX_PLACES, rounding=ROUND_HALF_UP)

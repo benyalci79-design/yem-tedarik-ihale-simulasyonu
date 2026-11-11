@@ -7,20 +7,15 @@ from app.models import Carrier, NpcRule, NpcSupplier, Product, SimulationState
 
 TWO_PLACES = Decimal("0.01")
 
-# (kod, ad, stok, tüketim, kritik kapsama, hedef kapsama, teklif penceresi,
-#  depo kapasitesi, stoktaki ortalama birim maliyet)
 PRODUCTS = (
     ("MISR", "Dane Mısır", Decimal("900"), Decimal("100"), Decimal("10"), Decimal("30"), 60, Decimal("5000.000"), Decimal("8.750000")),
     ("ARPA", "Arpa", Decimal("700"), Decimal("80"), Decimal("10"), Decimal("30"), 60, Decimal("4000.000"), Decimal("7.750000")),
     ("SOYA", "Soya Küspesi", Decimal("3000"), Decimal("60"), Decimal("10"), Decimal("30"), 60, Decimal("6000.000"), Decimal("13.000000")),
 )
 
-# (kod, ad, cevap olasılığı, fiyat çarpanı, min teslim, max teslim,
-#  nakliye dahil, min mevcut kg, max mevcut kg)
 NPCS = (
     ("NPC-A", "Örnek Yem A", Decimal("1.000"), Decimal("1.00"), 1, 3, True, Decimal("1000"), Decimal("3000")),
     ("NPC-B", "Örnek Yem B", Decimal("0.600"), Decimal("1.00"), 1, 3, True, Decimal("1000"), Decimal("3000")),
-    # C hiç cevap vermez: davet edilir ama teklif üretmez (demo senaryosu).
     ("NPC-C", "Örnek Yem C", Decimal("0.000"), Decimal("1.00"), 1, 3, True, Decimal("1000"), Decimal("3000")),
     ("NPC-D", "Ege Yem Ltd.", Decimal("0.850"), Decimal("0.98"), 4, 8, True, Decimal("3000"), Decimal("6000")),
     ("NPC-E", "Anadolu Tarım", Decimal("0.900"), Decimal("1.05"), 2, 5, True, Decimal("1500"), Decimal("3500")),
@@ -37,7 +32,6 @@ PRICE_RANGES = {
     "SOYA": (Decimal("12000.00"), Decimal("14000.00")),
 }
 
-# (kod, ad, TL/ton, taşıma süresi (simülasyon dakikası))
 CARRIERS = (
     ("EKONOMIK", "Ekonomik Nakliye", Decimal("180.00"), 8),
     ("STANDART", "Standart Nakliye", Decimal("450.00"), 5),

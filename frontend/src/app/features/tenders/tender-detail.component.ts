@@ -220,7 +220,6 @@ export class TenderDetailComponent {
   }
 
   incomingKg(tender: TenderDetail): number {
-    // Boş kapasite = kapasite - stok - yoldaki; yoldaki miktarı buradan türetiyoruz.
     return Math.max(
       0,
       Number(tender.product_capacity_kg) - Number(tender.product_stock_kg) - Number(tender.free_capacity_kg),

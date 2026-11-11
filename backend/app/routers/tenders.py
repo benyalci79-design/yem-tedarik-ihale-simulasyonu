@@ -125,7 +125,6 @@ def _base_tender(db: Session, tender: Tender, elapsed: Decimal) -> dict:
         "accepted_total_kg": _kg(accepted_total),
         "remaining_need_kg": _kg(remaining),
         "free_capacity_kg": _kg(free_capacity(db, tender.product)),
-        # İhale ekranında yeni alım kararı için ürünün anlık stok/fiyat özeti.
         "product_stock_kg": str(tender.product.current_stock_kg),
         "product_capacity_kg": str(tender.product.capacity_kg),
         "product_avg_cost_per_kg": str(tender.product.avg_cost_per_kg),
@@ -150,7 +149,6 @@ def _offer_details(
             "npc_name": participation.npc_supplier.name,
         }
         if not include_secrets:
-            # OPEN aşamasında teklif miktarı, fiyatı ve nakliye modu da gizlidir.
             base["offer_status"] = "Teklif bekleniyor"
             result.append(base)
             continue
@@ -268,7 +266,6 @@ def get_offers(tender_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("", status_code=201)
 def create_tender(payload: TenderCreate) -> dict:
-    # Önce saati işle: açılış anı ile kapasite kontrolü güncel olsun.
     engine.tick_once()
     db = SessionLocal()
     try:
@@ -304,8 +301,6 @@ def create_tender(payload: TenderCreate) -> dict:
             status="OPEN",
             opened_at_seconds=now,
             offer_closes_at_seconds=closes_at,
-            # Otomatik değerlendirme kaldırıldı; sütun NOT NULL olduğu için
-            # kapanışa eşitleniyor ve kullanılmıyor.
             evaluate_at_seconds=closes_at,
             created_at=datetime.utcnow(),
         )
@@ -356,7 +351,6 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
         product_id = db.scalar(select(Tender.product_id).where(Tender.id == tender_id))
         if product_id is None:
             raise ApiError(404, "NOT_FOUND", "İhale bulunamadı.")
-        # Kilit sırası: simülasyon -> ürün -> ihale -> teklif.
         product = db.get(Product, product_id, with_for_update=True)
         tender = db.get(Tender, tender_id, with_for_update=True)
         if product is None or tender is None:
@@ -416,7 +410,6 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
             accepted_at_seconds=now,
         )
         if participation.freight_included:
-            # Nakliye dahil: mal, hazırlık süresi sonunda teslim edilir.
             award.status = "IN_TRANSIT"
             award.delivery_due_at_seconds = delivery_due_seconds(
                 now, int(participation.delivery_minutes or 0), None, None
@@ -428,7 +421,6 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
             award.status = "AWAITING_CARRIER"
         db.add(award)
 
-        # "Son alım" bilgisi kabul anında güncellenir (mal fiyatı, nakliye hariç).
         product.last_purchase_unit_price = (
             Decimal(participation.unit_price) / TON_KG
         ).quantize(SIX_PLACES)

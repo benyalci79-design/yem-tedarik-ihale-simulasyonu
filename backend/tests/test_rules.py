@@ -56,7 +56,6 @@ def test_consumption_and_coverage():
 
 
 def test_consumption_does_not_change_unit_cost():
-    # Tüketim yalnızca miktarı düşürür; ortalama birim maliyet sabit kalır.
     stock = consume_stock(Decimal("900"), Decimal("100"), Decimal("60"))
     assert (stock * Decimal("8.750000")).quantize(Decimal("0.0001")) == Decimal("7000.0000")
 
@@ -99,7 +98,6 @@ def test_price_per_ton_to_per_kg():
 
 def test_free_capacity_accounts_for_stock_and_incoming():
     assert free_capacity_kg(Decimal("5000"), Decimal("900"), Decimal("1000")) == Decimal("3100")
-    # Stok + yoldaki miktar kapasiteyi aşarsa boş kapasite negatif olmaz.
     assert free_capacity_kg(Decimal("1000"), Decimal("900"), Decimal("500")) == Decimal("0")
 
 
@@ -112,7 +110,6 @@ def test_remaining_need_and_max_acceptable_quantity():
     remaining = remaining_need_kg(Decimal("3"), Decimal("500"))
     assert remaining == Decimal("2500")
     assert remaining_need_kg(Decimal("3"), Decimal("4000")) == Decimal("0")
-    # Üç sınırın en küçüğü: teklif 2000, kalan ihtiyaç 2500, boş kapasite 900.
     assert max_acceptable_kg(Decimal("2000"), remaining, Decimal("900")) == Decimal("900")
 
 
@@ -122,15 +119,12 @@ def test_landed_cost_with_and_without_freight():
 
 
 def test_weighted_average_cost():
-    # Boş depoya 2000 kg, 16000 TL: birim maliyet 8 TL/kg.
     assert weighted_average_cost(Decimal("0"), Decimal("0"), Decimal("2000"), Decimal("16000")) == Decimal(
         "8.000000"
     )
-    # 1000 kg x 8 TL + 1000 kg x 9 TL = 8.5 TL/kg.
     assert weighted_average_cost(Decimal("1000"), Decimal("8"), Decimal("1000"), Decimal("9000")) == Decimal(
         "8.500000"
     )
-    # Stok ve eklenen miktar yoksa son bilinen birim maliyet korunur (0'a düşmez).
     assert weighted_average_cost(Decimal("0"), Decimal("9.5"), Decimal("0"), Decimal("0")) == Decimal("9.5")
     assert weighted_average_cost(Decimal("0"), Decimal("0"), Decimal("0"), Decimal("0")) == Decimal("0")
 
@@ -140,15 +134,11 @@ def test_delivery_due_with_freight_included():
 
 
 def test_delivery_due_with_carrier_waits_for_assignment():
-    # Hazırlık 160'ta biter, nakliyeci 300'de atanır, 2 dk taşıma -> 420.
     assert delivery_due_seconds(Decimal("100"), 1, Decimal("300"), 2) == Decimal("420.000")
-    # Nakliyeci hazırlıktan önce atanırsa hazırlık bitişi belirleyicidir: 400 + 120.
     assert delivery_due_seconds(Decimal("100"), 5, Decimal("150"), 2) == Decimal("520.000")
 
 
 def test_total_unit_price_is_preserved_when_stock_is_zero():
-    # Depo tamamen boşken toplam birim fiyat 0'a düşmez; son bilinen fiyatların
-    # ortalaması gösterilir.
     assert _last_known_avg([Decimal("8"), Decimal("10")]) == Decimal("9.000000")
     assert _last_known_avg([]) == Decimal("0")
 

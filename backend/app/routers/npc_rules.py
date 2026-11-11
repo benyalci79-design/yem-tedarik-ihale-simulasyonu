@@ -55,8 +55,6 @@ def list_rules(
 
 @router.patch("/{rule_id}")
 def update_rule(rule_id: int, payload: NpcRulePatch, db: Session = Depends(get_db)) -> dict:
-    # Tick ve ayar API'si aynı kilit sırasını kullanır: simülasyon, sonra
-    # ilgili ürün/kural. Böylece davet anlık görüntüsü kısmen güncellenmez.
     state = db.get(SimulationState, 1, with_for_update=True)
     rule = db.get(NpcRule, rule_id, with_for_update=True)
     if rule is None:

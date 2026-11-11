@@ -6,11 +6,6 @@ import { ApiService, apiErrorMessage } from '../core/api.service';
 import { SimulationState } from '../core/models';
 import { numberTr } from './display';
 
-/**
- * Üst barda duran ortak simülasyon kontrolü: Dur · 0,5x · 1x · 2x · 3x ve
- * onay isteyen "Sıfırla" düğmesi. Sıfırlama tüm veriyi başlangıç durumuna
- * döndürür; onay penceresi olmadan çalışmaz.
- */
 @Component({
   selector: 'app-simulation-controls',
   standalone: true,
@@ -172,7 +167,6 @@ export class SimulationControlsComponent {
       .subscribe({
         next: () => {
           this.resetOpen = false;
-          // Tüm ekranlar temiz veriyle yeniden yüklensin.
           window.location.assign('/');
         },
         error: (error: unknown) => {
@@ -189,8 +183,6 @@ export class SimulationControlsComponent {
   }
 
   private apply(state: SimulationState): void {
-    // Sunucu değeri 1 sn'lik tick gecikmesiyle gelebilir; küçük geri farkları
-    // yutup saatin geri sıçramasını engelliyoruz, büyük sapmada sunucuya oturuyoruz.
     const server = Number(state.elapsed_seconds) || 0;
     const speed = Number(state.speed) || 1;
     const local = this.displayElapsed;

@@ -112,7 +112,6 @@ def assign_carrier(award_id: int, payload: CarrierAssign) -> dict:
         product_id = db.scalar(select(Tender.product_id).where(Tender.id == tender_id))
         if product_id is None:
             raise ApiError(404, "NOT_FOUND", "İhale bulunamadı.")
-        # Kilit sırası: simülasyon -> ürün -> ihale -> award.
         db.get(Product, product_id, with_for_update=True)
         db.get(Tender, tender_id, with_for_update=True)
         award = db.get(TenderAward, award_id, with_for_update=True)

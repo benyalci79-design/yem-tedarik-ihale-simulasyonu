@@ -14,7 +14,6 @@ import {
 } from '../../core/models';
 import { numberTr, statusLabel } from '../../shared/display';import { LineChartComponent } from '../../shared/line-chart.component';
 
-// Renk körlüğüne dayanıklı palet (Okabe-Ito) + farklı çizgi deseni ve işaretçi.
 const CHART_COLORS = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00'];
 const CHART_DASHES = ['', '8 5', '2 4', '12 4 2 4', '10 6', '4 3'];
 const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 'circle', 'square', 'triangle'];
@@ -204,7 +203,6 @@ export class DashboardComponent {
     timer(0, 5000)
       .pipe(
         switchMap(() => {
-          // Simülasyon dururken aynı geçmişi tekrar tekrar çizmeyelim.
           if (this.simulation && !this.simulation.is_running && this.history.length > 0) return EMPTY;
           return forkJoin({ metrics: this.api.stockMetrics(), history: this.api.stockHistory(300) }).pipe(
             catchError(() => EMPTY),

@@ -19,14 +19,11 @@ class Product(Base):
     critical_coverage_minutes: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
     target_coverage_minutes: Mapped[Decimal] = mapped_column(DECIMAL(8, 2), nullable=False)
     offer_window_seconds: Mapped[int] = mapped_column(INTEGER, nullable=False)
-    # Depo sınırı ve stoktaki ürünün ağırlıklı ortalama birim maliyeti (TL/kg).
     capacity_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="10000.000")
     avg_cost_per_kg: Mapped[Decimal] = mapped_column(DECIMAL(14, 6), nullable=False, server_default="0")
-    # En son teslim alınan malın birim maliyeti; stok 0 olsa da korunur.
     last_purchase_unit_price: Mapped[Decimal] = mapped_column(
         DECIMAL(14, 6), nullable=False, server_default="0"
     )
-    # Kullanılmıyor: otomatik ihale akışı kaldırıldı. Sütun geriye dönük uyumluluk için duruyor.
     next_eligible_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, default=0)
 
     npc_rules: Mapped[list["NpcRule"]] = relationship(back_populates="product", passive_deletes=True)
@@ -64,7 +61,6 @@ class NpcRule(Base):
     max_price: Mapped[Decimal] = mapped_column(DECIMAL(12, 2), nullable=False)
     min_delivery_minutes: Mapped[int] = mapped_column(SMALLINT, nullable=False)
     max_delivery_minutes: Mapped[int] = mapped_column(SMALLINT, nullable=False)
-    # True: fiyata nakliye dahil. False: nakliye ayrıca seçilir.
     freight_included: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
     min_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="1000")
     max_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="3000")
@@ -81,7 +77,6 @@ class SimulationState(Base):
     elapsed_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, default=0)
     last_tick_at: Mapped[datetime | None] = mapped_column(DATETIME(fsp=6), nullable=True)
     last_error: Mapped[str | None] = mapped_column(VARCHAR(500), nullable=True)
-    # Hız çarpanı (0.50 / 1.00 / 2.00 / 3.00); sadece gerçek zaman ölçeklenir.
     speed_multiplier: Mapped[Decimal] = mapped_column(DECIMAL(4, 2), nullable=False, server_default="1.00")
 
 
@@ -101,12 +96,10 @@ class Tender(Base):
     status: Mapped[str] = mapped_column(VARCHAR(16), nullable=False)
     opened_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False)
     offer_closes_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False)
-    # Kullanılmıyor (otomatik değerlendirme kaldırıldı); açılışta kapanışa eşitlenir.
     evaluate_at_seconds: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False)
     awarded_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivery_due_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
     delivered_at_seconds: Mapped[Decimal | None] = mapped_column(DECIMAL(16, 3), nullable=True)
-    # Kullanılmıyor: çoklu award modeline geçildi. Sütun geriye dönük uyumluluk için duruyor.
     winning_participation_id: Mapped[int | None] = mapped_column(
         BIGINT(unsigned=True), ForeignKey("tender_participations.id", ondelete="RESTRICT"), nullable=True
     )
@@ -144,7 +137,6 @@ class TenderParticipation(Base):
     max_price: Mapped[Decimal] = mapped_column(DECIMAL(12, 2), nullable=False)
     min_delivery_minutes: Mapped[int] = mapped_column(SMALLINT, nullable=False)
     max_delivery_minutes: Mapped[int] = mapped_column(SMALLINT, nullable=False)
-    # Davet anındaki kural anlık görüntüsü (sonradan ayar değişse bile sabit kalır).
     freight_included: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
     min_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="1000")
     max_available_kg: Mapped[Decimal] = mapped_column(DECIMAL(16, 3), nullable=False, server_default="3000")

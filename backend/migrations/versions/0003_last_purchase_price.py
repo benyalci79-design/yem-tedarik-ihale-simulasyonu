@@ -21,7 +21,6 @@ def upgrade() -> None:
         "products",
         sa.Column("last_purchase_unit_price", sa.Numeric(14, 6), nullable=False, server_default="0"),
     )
-    # Mevcut veride son alım fiyatı bilinmiyor; en iyi tahmin ortalama maliyettir.
     op.execute("UPDATE products SET last_purchase_unit_price = avg_cost_per_kg")
 
 

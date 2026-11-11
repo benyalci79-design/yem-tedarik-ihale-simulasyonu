@@ -106,8 +106,6 @@ export class ProductsComponent {
         this.error = '';
         for (const product of this.products) {
           this.forms[product.id] = this.fb.group({
-            // Motor stokta 6 basamak saklayabilir; kullanıcı ayarı şartnameye
-            // göre en fazla 3 basamak gönderir.
             current_stock_kg: [Number(Number(product.current_stock_kg).toFixed(3)), [Validators.required, Validators.min(0)]],
             consumption_kg_per_min: [Number(product.consumption_kg_per_min), [Validators.required, Validators.min(.001)]],
             critical_coverage_minutes: [Number(product.critical_coverage_minutes), [Validators.required, Validators.min(.01)]],

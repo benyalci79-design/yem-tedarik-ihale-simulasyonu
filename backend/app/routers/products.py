@@ -72,8 +72,6 @@ def list_products(db: Session = Depends(get_db)) -> dict:
 
 @router.patch("/{product_id}")
 def update_product(product_id: int, payload: ProductPatch, db: Session = Depends(get_db)) -> dict:
-    # Motor tick'i de önce simülasyon sonra ürün satırını kilitler; aynı sıra
-    # ayar değişikliğinde korunarak ara durumda kısmi güncelleme önlenir.
     state = db.get(SimulationState, 1, with_for_update=True)
     product = db.get(Product, product_id, with_for_update=True)
     if product is None:
@@ -96,8 +94,6 @@ def update_product(product_id: int, payload: ProductPatch, db: Session = Depends
     }
     if merged["target_coverage_minutes"] <= merged["critical_coverage_minutes"]:
         raise ApiError(422, "VALIDATION_ERROR", "Hedef kapsama kritik kapsama değerinden büyük olmalıdır.")
-    # Depo sınırı mevcut stoğun ve hedef kapsamanın altına inemez; aksi hâlde
-    # hedef hiçbir zaman doldurulamaz.
     if merged["capacity_kg"] < merged["current_stock_kg"]:
         raise ApiError(
             422,
