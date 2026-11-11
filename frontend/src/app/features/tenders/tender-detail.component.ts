@@ -41,6 +41,8 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
         <span>Sezon <b>×{{ numberTr(item.product_season_factor, 2) }}</b></span>
         <span class="sep">·</span>
         <span>Fire <b>%{{ numberTr(item.product_loss_percent, 2) }}</b></span>
+        <span class="sep">·</span>
+        <span [class.over]="Number(item.budget_remaining_tl) <= 0">Bütçe kalan <b>{{ numberTr(item.budget_remaining_tl, 0) }} TL</b></span>
       </section>
 
       <section class="need-grid">
@@ -148,7 +150,7 @@ import { StatusBadgeComponent } from '../../shared/status-badge.component';
     '.eyebrow { color:#1d4ed8; font-size:.78rem; font-weight:800; letter-spacing:.08em; }.page-heading h1 { margin:.3rem 0; color:#111827; font-size:2.2rem; }.lede { color:#4b5563; }',
     '.need-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:.8rem; margin-bottom:1.2rem; }',
     '.stock-strip { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; padding:.55rem .85rem; margin-bottom:.9rem; background:#f1f5f9; border:1px solid #e2e8f0; border-radius:.65rem; color:#334155; font-size:.85rem; }',
-    '.stock-strip b { color:#111827; font-variant-numeric:tabular-nums; }.stock-strip .sep { color:#94a3b8; }.stock-strip .strip-title { font-weight:800; color:#1d4ed8; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }.stock-strip .buy b { color:#1d4ed8; }',    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
+    '.stock-strip b { color:#111827; font-variant-numeric:tabular-nums; }.stock-strip .sep { color:#94a3b8; }.stock-strip .strip-title { font-weight:800; color:#1d4ed8; font-size:.75rem; letter-spacing:.06em; text-transform:uppercase; }.stock-strip .buy b { color:#1d4ed8; }.stock-strip .over b { color:#b91c1c; }',    '.need-grid article { display:grid; gap:.2rem; padding:.9rem 1rem; background:#eff6ff; border:1px solid #bfdbfe; border-radius:.8rem; }.need-grid span { color:#475569; font-size:.8rem; }.need-grid strong { color:#1e3a8a; font-size:1.3rem; }.need-grid article.done { background:#dcfce7; border-color:#86efac; }.need-grid article.done strong { color:#166534; }',
     '.reason { padding:.8rem 1rem; background:#f1f5f9; border-left:4px solid #1d4ed8; border-radius:.5rem; color:#172033; }',
     '.card { background:#fff; border:1px solid #cbd5e1; border-radius:1rem; padding:1.2rem; margin-bottom:1.2rem; }',
     '.card-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:.8rem; }.card-head h2 { margin:0; color:#111827; }.live { color:#047857; font-weight:800; font-size:.8rem; letter-spacing:.06em; }',

@@ -153,3 +153,14 @@ class CarrierAssign(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     carrier_id: int = Field(gt=0)
+
+
+class BudgetPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    monthly_limit_tl: Decimal = Field(gt=0, max_digits=16, decimal_places=2)
+
+    @field_validator("monthly_limit_tl")
+    @classmethod
+    def validate_two_places(cls, value: Decimal) -> Decimal:
+        return _max_places(value, 2)

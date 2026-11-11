@@ -125,6 +125,7 @@ export interface TenderDetail extends TenderSummary {
   delivery_due_at_seconds: string | null;
   delivered_at_seconds: string | null;
   delivery_status: string | null;
+  budget_remaining_tl: string;
 }
 
 export interface Carrier {
@@ -198,6 +199,17 @@ export interface PurchaseStatsItem {
   min_unit_price: string | null;
   max_unit_price: string | null;
   avg_unit_price: string | null;
+}
+
+export interface BudgetState {
+  monthly_limit_tl: string;
+  spent_tl: string;
+  remaining_tl: string;
+  usage_percent: string;
+  period_index: number;
+  period_start_seconds: string;
+  period_end_seconds: string;
+  exceeded: boolean;
 }
 
 export interface ChartSeries {

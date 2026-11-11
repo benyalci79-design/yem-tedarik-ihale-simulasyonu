@@ -2,6 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  BudgetState,
   Carrier,
   HistoryPoint,
   NpcRule,
@@ -120,5 +121,15 @@ export class ApiService {
 
   purchaseStats(): Observable<{ items: PurchaseStatsItem[] }> {
     return this.http.get<{ items: PurchaseStatsItem[] }>(this.base + '/purchase-stats');
+  }
+
+  budget(): Observable<BudgetState> {
+    return this.http.get<BudgetState>(this.base + '/budget');
+  }
+
+  updateBudget(monthlyLimit: number): Observable<BudgetState> {
+    return this.http.patch<BudgetState>(this.base + '/budget', {
+      monthly_limit_tl: monthlyLimit.toFixed(2),
+    });
   }
 }

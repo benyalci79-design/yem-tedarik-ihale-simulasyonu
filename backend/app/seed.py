@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.demo_history import seed_history
-from app.models import Carrier, NpcRule, NpcSupplier, Product, SimulationState
+from app.models import Budget, Carrier, NpcRule, NpcSupplier, Product, SimulationState
 
 TWO_PLACES = Decimal("0.01")
 
@@ -51,6 +51,23 @@ def _price_range(product_code: str, factor: Decimal) -> tuple[Decimal, Decimal]:
         (base_min * factor).quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
         (base_max * factor).quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
     )
+
+
+def _ensure_budget(db, reset: bool = False) -> None:
+    budget = db.get(Budget, 1)
+    if budget is None:
+        db.add(
+            Budget(
+                id=1,
+                code="YEM-HAM",
+                name="Yem Hammadde Bütçesi",
+                monthly_limit_tl=Decimal("500000.00"),
+                is_active=True,
+            )
+        )
+    elif reset:
+        budget.monthly_limit_tl = Decimal("500000.00")
+        budget.is_active = True
 
 
 def main() -> None:
@@ -162,10 +179,10 @@ def main() -> None:
                     )
                 )
 
+        _ensure_budget(db)
         baseline = seed_history(db)
         if baseline is not None and Decimal(state.elapsed_seconds) < baseline:
             state.elapsed_seconds = baseline
-
 
 def restore_defaults(db) -> None:
     """Ürün, NPC kuralı ve nakliyeci değerlerini seed başlangıç değerlerine döndürür.
@@ -300,6 +317,7 @@ def restore_defaults(db) -> None:
         carrier.transit_minutes = transit_minutes
         carrier.is_active = True
 
+    _ensure_budget(db, reset=True)
     return seed_history(db)
 
 

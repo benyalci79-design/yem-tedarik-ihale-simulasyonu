@@ -1,10 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { catchError, EMPTY, finalize, forkJoin, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ApiService } from '../../core/api.service';
+import { ApiService, apiErrorMessage } from '../../core/api.service';
 import {
+  BudgetState,
   ChartSeries,
   HistoryPoint,
   Product,
@@ -21,7 +23,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, LineChartComponent],
+  imports: [CommonModule, RouterLink, FormsModule, LineChartComponent],
   template: `
     <section class="page-heading">
       <div><p class="eyebrow">YÖNETİCİ KONSOLU</p><h1>Simülasyon özeti</h1><p class="lede">Stoktan teslimata kadar devam eden süreci canlı izleyin.</p></div>
@@ -40,6 +42,30 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
         <article><span>İzlenen ürün</span><strong>{{ products.length }}</strong><small>stok kartı</small></article>
         <article><span>Aktif ihale</span><strong>{{ activeTenders.length }}</strong><small>şu anda işlemde</small></article>
         <article><span>Toplam ihale</span><strong>{{ tenders.length }}</strong><small>simülasyon geçmişi</small></article>
+      </section>
+
+      <section class="budget-card" *ngIf="budget">
+        <div class="budget-head">
+          <div>
+            <span class="eyebrow">SATIN ALMA BÜTÇESİ · DÖNEM {{ budget.period_index }}</span>
+            <strong>{{ numberTr(budget.spent_tl, 0) }} TL <small>/ {{ numberTr(budget.monthly_limit_tl, 0) }} TL</small></strong>
+          </div>
+          <div class="budget-side">
+            <span class="budget-usage" [class.warn]="budgetUsage >= 80" [class.over]="budgetUsage >= 100">%{{ numberTr(budget.usage_percent, 0) }}</span>
+            <button type="button" class="link-button" *ngIf="!budgetEditing" [disabled]="simulation?.is_running" (click)="startEditBudget()">Limiti düzenle</button>
+          </div>
+        </div>
+        <div class="budget-bar" [class.warn]="budgetUsage >= 80" [class.over]="budgetUsage >= 100"><span [style.width.%]="budgetFill"></span></div>
+        <div class="budget-foot">
+          <span>Kalan: {{ numberTr(budget.remaining_tl, 0) }} TL</span>
+          <span class="over-text" *ngIf="budget.exceeded">Bütçe aşıldı</span>
+        </div>
+        <div class="budget-edit" *ngIf="budgetEditing">
+          <input type="number" [(ngModel)]="budgetInput" min="1" step="1000" aria-label="Aylık bütçe limiti (TL)">
+          <button type="button" class="button primary" [disabled]="savingBudget" (click)="saveBudget()">Kaydet</button>
+          <button type="button" class="button ghost" [disabled]="savingBudget" (click)="cancelEditBudget()">Vazgeç</button>
+          <span class="error" *ngIf="budgetError">{{ budgetError }}</span>
+        </div>
       </section>
 
       <section class="section-heading cost-heading">
@@ -87,6 +113,11 @@ export class DashboardComponent {
   products: Product[] = [];
   tenders: TenderSummary[] = [];
   metrics: StockMetrics | null = null;
+  budget: BudgetState | null = null;
+  budgetEditing = false;
+  budgetInput = 0;
+  budgetError = '';
+  savingBudget = false;
   history: HistoryPoint[] = [];
   loading = true;
   error = '';
@@ -148,6 +179,47 @@ export class DashboardComponent {
     if (!this.simulation?.is_running) return 'Hız düğmelerinden birine bastığınızda simülasyon saati ilerlemeye başlar.';
     if (this.activeTenders.length) return 'Süre dolduğunda teklifler açılır; kabul ettiğiniz miktarlar teslimata dönüşür.';
     return 'Kritik kapsamaya düşen ürün için İhale Listesi ekranından ihale açın.';
+  }
+
+  get budgetUsage(): number {
+    return Number(this.budget?.usage_percent ?? 0);
+  }
+
+  get budgetFill(): number {
+    return Math.min(100, Math.max(0, this.budgetUsage));
+  }
+
+  startEditBudget(): void {
+    this.budgetInput = Number(this.budget?.monthly_limit_tl ?? 0);
+    this.budgetError = '';
+    this.budgetEditing = true;
+  }
+
+  cancelEditBudget(): void {
+    this.budgetEditing = false;
+    this.budgetError = '';
+  }
+
+  saveBudget(): void {
+    const value = Number(this.budgetInput);
+    if (!Number.isFinite(value) || value <= 0) {
+      this.budgetError = 'Sıfırdan büyük bir limit girin.';
+      return;
+    }
+    this.savingBudget = true;
+    this.budgetError = '';
+    this.api
+      .updateBudget(value)
+      .pipe(finalize(() => (this.savingBudget = false)))
+      .subscribe({
+        next: (budget) => {
+          this.budget = budget;
+          this.budgetEditing = false;
+        },
+        error: (error: unknown) => {
+          this.budgetError = apiErrorMessage(error, 'Bütçe güncellenemedi.');
+        },
+      });
   }
 
   get chartLabels(): string[] {
@@ -218,13 +290,24 @@ export class DashboardComponent {
   }
 
   private loadSnapshot() {
-    return forkJoin({ simulation: this.api.simulation(), products: this.api.products(), tenders: this.api.tenders() });
+    return forkJoin({
+      simulation: this.api.simulation(),
+      products: this.api.products(),
+      tenders: this.api.tenders(),
+      budget: this.api.budget(),
+    });
   }
 
-  private applySnapshot(snapshot: { simulation: SimulationState; products: { items: Product[] }; tenders: { items: TenderSummary[] } }): void {
+  private applySnapshot(snapshot: {
+    simulation: SimulationState;
+    products: { items: Product[] };
+    tenders: { items: TenderSummary[] };
+    budget: BudgetState;
+  }): void {
     this.setSimulation(snapshot.simulation);
     this.products = snapshot.products.items;
     this.tenders = snapshot.tenders.items;
+    this.budget = snapshot.budget;
     this.loading = false;
     this.error = '';
   }

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.budget import budget_state
 from app.db import SessionLocal, get_db
 from app.errors import ApiError
 from app.inventory import free_capacity
@@ -231,6 +232,7 @@ def serialize_detail(db: Session, tender: Tender) -> dict:
         if tender.status == "NO_AWARD"
         else None
     )
+    data["budget_remaining_tl"] = budget_state(db)["remaining_tl"]
     return data
 
 
@@ -411,6 +413,20 @@ def accept_offer(tender_id: int, payload: TenderAccept) -> dict:
                 422,
                 "QUANTITY_EXCEEDS_OFFER",
                 f"NPC yalnızca {_kg(offered)} kg teklif etti.",
+            )
+
+        if participation.freight_included:
+            planned_cost = landed_cost_tl(quantity, Decimal(participation.unit_price), None)
+        else:
+            planned_cost = (
+                quantity / TON_KG * Decimal(participation.unit_price)
+            ).quantize(Decimal("0.01"))
+        remaining_budget = Decimal(budget_state(db)["remaining_tl"])
+        if planned_cost > remaining_budget:
+            raise ApiError(
+                422,
+                "BUDGET_EXCEEDED",
+                f"Bütçe yetersiz. Kalan: {remaining_budget:.2f} TL, bu alım: {planned_cost:.2f} TL.",
             )
 
         now = Decimal(state.elapsed_seconds) if state is not None else ZERO

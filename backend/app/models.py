@@ -209,6 +209,16 @@ class TenderAward(Base):
     carrier: Mapped[Carrier | None] = relationship(back_populates="awards")
 
 
+class Budget(Base):
+    __tablename__ = "budgets"
+
+    id: Mapped[int] = mapped_column(INTEGER, primary_key=True)
+    code: Mapped[str] = mapped_column(VARCHAR(30), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(VARCHAR(100), nullable=False)
+    monthly_limit_tl: Mapped[Decimal] = mapped_column(DECIMAL(16, 2), nullable=False)
+    is_active: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, server_default=true())
+
+
 class StockSnapshot(Base):
     __tablename__ = "stock_snapshots"
     __table_args__ = (
