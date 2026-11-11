@@ -27,6 +27,9 @@ def serialize_rule(rule: NpcRule) -> dict:
         "max_price": str(rule.max_price),
         "min_delivery_minutes": rule.min_delivery_minutes,
         "max_delivery_minutes": rule.max_delivery_minutes,
+        "freight_included": rule.freight_included,
+        "min_available_kg": str(rule.min_available_kg),
+        "max_available_kg": str(rule.max_available_kg),
     }
 
 
@@ -72,12 +75,21 @@ def update_rule(rule_id: int, payload: NpcRulePatch, db: Session = Depends(get_d
         "max_price": Decimal(rule.max_price),
         "min_delivery_minutes": rule.min_delivery_minutes,
         "max_delivery_minutes": rule.max_delivery_minutes,
+        "freight_included": rule.freight_included,
+        "min_available_kg": Decimal(rule.min_available_kg),
+        "max_available_kg": Decimal(rule.max_available_kg),
         **values,
     }
     if merged["max_price"] < merged["min_price"]:
         raise ApiError(422, "VALIDATION_ERROR", "Maksimum fiyat minimum fiyattan küçük olamaz.")
     if merged["max_delivery_minutes"] < merged["min_delivery_minutes"]:
         raise ApiError(422, "VALIDATION_ERROR", "Maksimum teslim süresi minimum teslim süresinden küçük olamaz.")
+    if merged["max_available_kg"] < merged["min_available_kg"]:
+        raise ApiError(
+            422,
+            "VALIDATION_ERROR",
+            "Maksimum mevcut miktar minimum miktardan küçük olamaz.",
+        )
     if not merged["is_invited"]:
         invited_exists = db.scalar(
             select(NpcRule.id).where(

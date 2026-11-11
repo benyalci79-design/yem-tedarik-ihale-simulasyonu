@@ -19,6 +19,7 @@ class OfferPlan:
 class GeneratedOffer:
     unit_price: Decimal
     delivery_minutes: int
+    offered_quantity_kg: Decimal
 
 
 def schedule_response(
@@ -51,13 +52,26 @@ def generate_offer(
     max_price: Decimal,
     min_delivery_minutes: int,
     max_delivery_minutes: int,
+    min_available_kg: Decimal,
+    max_available_kg: Decimal,
     rng: Rng,
 ) -> GeneratedOffer:
+    """NPC teklifini üretir.
+
+    RNG çağrı sırası sabittir (fiyat -> teslim -> miktar); testler bu sıraya
+    göre tamsayı dizisi verir. Miktar kg tamsayıdır.
+    """
     min_cents = int(min_price * 100)
     max_cents = int(max_price * 100)
+    unit_price = Decimal(rng.randint(min_cents, max_cents)) / Decimal("100")
+    delivery_minutes = rng.randint(min_delivery_minutes, max_delivery_minutes)
+    lowest_kg = int(min_available_kg)
+    highest_kg = int(max_available_kg)
+    offered_quantity_kg = Decimal(rng.randint(lowest_kg, highest_kg))
     return GeneratedOffer(
-        unit_price=Decimal(rng.randint(min_cents, max_cents)) / Decimal("100"),
-        delivery_minutes=rng.randint(min_delivery_minutes, max_delivery_minutes),
+        unit_price=unit_price,
+        delivery_minutes=delivery_minutes,
+        offered_quantity_kg=offered_quantity_kg,
     )
 
 

@@ -1,6 +1,9 @@
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+SPEEDS = ("0.5", "1", "2", "3")
 
 
 def _max_places(value: Decimal, places: int) -> Decimal:
@@ -23,13 +26,15 @@ class ProductPatch(BaseModel):
     critical_coverage_minutes: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
     target_coverage_minutes: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
     offer_window_seconds: int | None = Field(default=None, ge=10, le=600)
+    capacity_kg: Decimal | None = Field(default=None, gt=0, max_digits=16, decimal_places=3)
+    avg_cost_per_kg: Decimal | None = Field(default=None, ge=0, max_digits=14, decimal_places=6)
 
     @model_validator(mode="before")
     @classmethod
     def reject_null_values(cls, data):
         return _reject_explicit_nulls(data)
 
-    @field_validator("current_stock_kg", "consumption_kg_per_min")
+    @field_validator("current_stock_kg", "consumption_kg_per_min", "capacity_kg")
     @classmethod
     def validate_three_places(cls, value: Decimal | None) -> Decimal | None:
         return None if value is None else _max_places(value, 3)
@@ -38,6 +43,11 @@ class ProductPatch(BaseModel):
     @classmethod
     def validate_two_places(cls, value: Decimal | None) -> Decimal | None:
         return None if value is None else _max_places(value, 2)
+
+    @field_validator("avg_cost_per_kg")
+    @classmethod
+    def validate_six_places(cls, value: Decimal | None) -> Decimal | None:
+        return None if value is None else _max_places(value, 6)
 
     @model_validator(mode="after")
     def validate_target_if_both_present(self):
@@ -59,6 +69,9 @@ class NpcRulePatch(BaseModel):
     max_price: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     min_delivery_minutes: int | None = Field(default=None, ge=1, le=60)
     max_delivery_minutes: int | None = Field(default=None, ge=1, le=60)
+    freight_included: bool | None = None
+    min_available_kg: Decimal | None = Field(default=None, gt=0, max_digits=16, decimal_places=3)
+    max_available_kg: Decimal | None = Field(default=None, gt=0, max_digits=16, decimal_places=3)
 
     @model_validator(mode="before")
     @classmethod
@@ -75,6 +88,11 @@ class NpcRulePatch(BaseModel):
     def validate_price_places(cls, value: Decimal | None) -> Decimal | None:
         return None if value is None else _max_places(value, 2)
 
+    @field_validator("min_available_kg", "max_available_kg")
+    @classmethod
+    def validate_available_places(cls, value: Decimal | None) -> Decimal | None:
+        return None if value is None else _max_places(value, 3)
+
     @model_validator(mode="after")
     def validate_ranges_if_both_present(self):
         if self.min_price is not None and self.max_price is not None and self.max_price < self.min_price:
@@ -85,4 +103,46 @@ class NpcRulePatch(BaseModel):
             and self.max_delivery_minutes < self.min_delivery_minutes
         ):
             raise ValueError("Maksimum teslim süresi minimum teslim süresinden küçük olamaz.")
+        if (
+            self.min_available_kg is not None
+            and self.max_available_kg is not None
+            and self.max_available_kg < self.min_available_kg
+        ):
+            raise ValueError("Maksimum mevcut miktar minimum miktardan küçük olamaz.")
         return self
+
+
+class TenderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    product_id: int = Field(gt=0)
+    quantity_ton: Decimal = Field(gt=0, max_digits=12, decimal_places=3)
+
+    @field_validator("quantity_ton")
+    @classmethod
+    def validate_three_places(cls, value: Decimal) -> Decimal:
+        return _max_places(value, 3)
+
+
+class TenderAccept(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    participation_id: int = Field(gt=0)
+    quantity_kg: Decimal = Field(gt=0, max_digits=16, decimal_places=3)
+
+    @field_validator("quantity_kg")
+    @classmethod
+    def validate_three_places(cls, value: Decimal) -> Decimal:
+        return _max_places(value, 3)
+
+
+class SpeedRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    speed: Literal["0.5", "1", "2", "3"]
+
+
+class CarrierAssign(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    carrier_id: int = Field(gt=0)

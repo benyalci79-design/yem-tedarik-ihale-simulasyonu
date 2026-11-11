@@ -5,19 +5,29 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Callable, Protocol
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.db import SessionLocal
-from app.models import NpcRule, Product, SimulationState, Tender, TenderParticipation
-from app.simulation.evaluation import CandidateOffer, evaluate_offers
+from app.models import (
+    Product,
+    SimulationState,
+    StockSnapshot,
+    Tender,
+    TenderAward,
+    TenderParticipation,
+)
 from app.simulation.npc import DefaultRng, Rng, generate_offer, schedule_response
-from app.simulation.rules import consume_stock, coverage_minutes, deliver_stock_once, tender_quantity_ton
+from app.simulation.rules import can_deliver_award, consume_stock, weighted_average_cost
 from app.simulation.timeline import TimelineEvent, ordered_events
 
 ACTIVE_STATUSES = ("OPEN", "EVALUATION", "AWARDED")
+INCOMING_STATUSES = ("AWAITING_CARRIER", "IN_TRANSIT")
 ZERO = Decimal("0")
-THIRTY_SECONDS = Decimal("30")
 THOUSANDTH = Decimal("0.001")
+FOUR_PLACES = Decimal("0.0001")
+# Zaman serisi grafiği için ürün başına tutulan en fazla nokta sayısı.
+SNAPSHOT_RETENTION = 3000
+SNAPSHOT_PRUNE_EVERY = 30
 
 
 class Clock(Protocol):
@@ -84,6 +94,25 @@ class SimulationEngine:
                     state.last_tick_at = None
                 return state
 
+    def set_speed(self, speed: Decimal) -> SimulationState:
+        """Önce eski hızla geçen zamanı işler, sonra hızı değiştirir.
+
+        Böylece hız değişimi geçmiş zamanı yanlış ölçeklemez; sayaç, değişim
+        anından itibaren yeni hızla ilerler. Simülasyon çalışmıyorsa başlatılır.
+        """
+        with self._lock:
+            self.tick_once()
+            with self.session_factory.begin() as db:
+                state = db.get(SimulationState, 1, with_for_update=True)
+                if state is None:
+                    state = SimulationState(id=1, is_running=True, elapsed_seconds=ZERO)
+                    db.add(state)
+                state.speed_multiplier = speed
+                state.is_running = True
+                state.last_tick_at = self.clock.now()
+                state.last_error = None
+                return state
+
     def tick_once(self) -> SimulationState | None:
         with self._lock:
             return self._tick_locked(self.clock.now())
@@ -99,7 +128,9 @@ class SimulationEngine:
                 db.commit()
                 return state
 
-            delta = decimal_seconds((now - state.last_tick_at).total_seconds())
+            real_delta = decimal_seconds((now - state.last_tick_at).total_seconds())
+            speed = Decimal(state.speed_multiplier)
+            delta = decimal_seconds(real_delta * speed)
             if delta <= ZERO:
                 return state
 
@@ -109,6 +140,7 @@ class SimulationEngine:
             state.elapsed_seconds = target
             state.last_tick_at = now
             state.last_error = None
+            self._write_snapshots(db, target)
             db.commit()
             return state
         except Exception:
@@ -149,12 +181,12 @@ class SimulationEngine:
         state = db.get(SimulationState, 1, with_for_update=True)
         if state is not None:
             state.elapsed_seconds = cursor
-        self._open_needed_tenders(db, cursor)
 
     def _consume_all(self, db, elapsed_seconds: Decimal) -> None:
         if elapsed_seconds <= ZERO:
             return
         for product in db.scalars(select(Product).order_by(Product.id)).all():
+            # Tüketim yalnızca stoğu düşürür; ortalama birim maliyet değişmez.
             product.current_stock_kg = consume_stock(
                 Decimal(product.current_stock_kg),
                 Decimal(product.consumption_kg_per_min),
@@ -163,35 +195,33 @@ class SimulationEngine:
 
     def _events_between(self, db, current: Decimal, target: Decimal) -> list[tuple[Decimal, int, str, int]]:
         events: list[tuple[Decimal, int, str, int]] = []
-        for tender in db.scalars(select(Tender).order_by(Tender.id)).all():
-            if tender.status == "AWARDED" and tender.delivery_due_at_seconds is not None:
-                due = Decimal(tender.delivery_due_at_seconds)
-                if current < due <= target:
-                    events.append((due, 0, "delivery", tender.id))
-            if tender.status == "OPEN":
-                close = Decimal(tender.offer_closes_at_seconds)
-                if current < close <= target:
-                    events.append((close, 3, "close", tender.id))
-                for participation in tender.participations:
-                    if (
-                        participation.will_respond
-                        and not participation.has_offer
-                        and participation.response_at_seconds is not None
-                    ):
-                        response_at = Decimal(participation.response_at_seconds)
-                        if current < response_at <= target:
-                            events.append((response_at, 2, "response", participation.id))
-            if tender.status == "EVALUATION":
-                evaluate_at = Decimal(tender.evaluate_at_seconds)
-                if current < evaluate_at <= target:
-                    events.append((evaluate_at, 4, "evaluate", tender.id))
+        for award in db.scalars(
+            select(TenderAward).where(
+                TenderAward.status == "IN_TRANSIT",
+                TenderAward.delivery_due_at_seconds.is_not(None),
+            )
+        ).all():
+            due = Decimal(award.delivery_due_at_seconds)
+            if current < due <= target:
+                events.append((due, 0, "delivery", award.id))
+        for tender in db.scalars(select(Tender).where(Tender.status == "OPEN").order_by(Tender.id)).all():
+            close = Decimal(tender.offer_closes_at_seconds)
+            if current < close <= target:
+                events.append((close, 3, "close", tender.id))
+            for participation in tender.participations:
+                if (
+                    participation.will_respond
+                    and not participation.has_offer
+                    and participation.response_at_seconds is not None
+                ):
+                    response_at = Decimal(participation.response_at_seconds)
+                    if current < response_at <= target:
+                        events.append((response_at, 2, "response", participation.id))
         return events
 
     def _process_event(self, db, kind: str, object_id: int, event_time: Decimal) -> None:
         if kind == "delivery":
-            tender = db.get(Tender, object_id, with_for_update=True)
-            if tender is not None:
-                self._deliver_tender(db, tender, event_time)
+            self._deliver_award(db, object_id, event_time)
         elif kind == "response":
             participation = db.get(TenderParticipation, object_id, with_for_update=True)
             if participation is not None:
@@ -199,11 +229,8 @@ class SimulationEngine:
         elif kind == "close":
             tender = db.get(Tender, object_id, with_for_update=True)
             if tender is not None and tender.status == "OPEN":
+                # Karar kullanıcıya aittir; motor burada durur.
                 tender.status = "EVALUATION"
-        elif kind == "evaluate":
-            tender = db.get(Tender, object_id, with_for_update=True)
-            if tender is not None:
-                self._evaluate_tender(db, tender, event_time)
 
     def _submit_offer(self, db, participation: TenderParticipation, event_time: Decimal) -> None:
         tender = db.get(Tender, participation.tender_id)
@@ -220,142 +247,85 @@ class SimulationEngine:
             Decimal(participation.max_price),
             participation.min_delivery_minutes,
             participation.max_delivery_minutes,
+            Decimal(participation.min_available_kg),
+            Decimal(participation.max_available_kg),
             self.rng,
         )
         participation.has_offer = True
         participation.unit_price = offer.unit_price
         participation.delivery_minutes = offer.delivery_minutes
+        participation.offered_quantity_kg = offer.offered_quantity_kg
         participation.submitted_at_seconds = event_time
         participation.decision = "PENDING"
 
-    def _evaluate_tender(self, db, tender: Tender, event_time: Decimal) -> None:
-        if tender.status != "EVALUATION":
+    def _deliver_award(self, db, award_id: int, event_time: Decimal) -> None:
+        award = db.get(TenderAward, award_id, with_for_update=True)
+        if award is None or not can_deliver_award(award.status, award.delivered_at_seconds):
+            return
+        tender = db.get(Tender, award.tender_id)
+        if tender is None:
             return
         product = db.get(Product, tender.product_id, with_for_update=True)
         if product is None:
             return
-        stock = Decimal(product.current_stock_kg)
-        consumption = Decimal(product.consumption_kg_per_min)
-        coverage = coverage_minutes(stock, consumption)
-        tender.evaluated_stock_kg = stock
-        tender.evaluated_consumption_kg_per_min = consumption
-        tender.evaluated_coverage_minutes = coverage
 
-        offers = [
-            CandidateOffer(
-                participation_id=participation.id,
-                npc_supplier_id=participation.npc_supplier_id,
-                unit_price=Decimal(participation.unit_price),
-                delivery_minutes=participation.delivery_minutes,
-            )
-            for participation in tender.participations
-            if participation.has_offer and participation.unit_price is not None and participation.delivery_minutes is not None
-        ]
-        decision = evaluate_offers(offers, coverage)
-        if decision.winner_id is None:
-            tender.status = "NO_AWARD"
-            tender.result_reason = "Hiç gerçek teklif alınamadı"
-            product.next_eligible_at_seconds = event_time + THIRTY_SECONDS
-            return
-
-        for participation in tender.participations:
-            if not participation.has_offer:
-                continue
-            if participation.id == decision.winner_id:
-                participation.decision = "ACCEPTED"
-                participation.decision_reason = decision.accepted_reason
-                tender.winning_participation_id = participation.id
-                tender.awarded_at_seconds = event_time
-                tender.delivery_due_at_seconds = event_time + Decimal(participation.delivery_minutes) * Decimal("60")
-            else:
-                participation.decision = "REJECTED"
-                participation.decision_reason = decision.rejected_reasons.get(
-                    participation.id, "Daha uygun fiyat/sıralama nedeniyle seçilmedi"
-                )
-        tender.status = "AWARDED"
-
-    def _deliver_tender(self, db, tender: Tender, event_time: Decimal) -> None:
-        if tender.status != "AWARDED" or tender.delivered_at_seconds is not None:
-            return
-        product = db.get(Product, tender.product_id, with_for_update=True)
-        if product is None:
-            return
-        new_stock, new_status, changed = deliver_stock_once(
-            tender.status,
-            tender.delivered_at_seconds,
-            Decimal(product.current_stock_kg),
-            Decimal(tender.quantity_ton),
+        stock_before = Decimal(product.current_stock_kg)
+        quantity = Decimal(award.quantity_kg)
+        product.current_stock_kg = stock_before + quantity
+        product.avg_cost_per_kg = weighted_average_cost(
+            stock_before,
+            Decimal(product.avg_cost_per_kg),
+            quantity,
+            Decimal(award.landed_cost_tl or ZERO),
         )
-        if changed:
-            product.current_stock_kg = new_stock
-            tender.delivered_at_seconds = event_time
-            tender.status = new_status
+        award.delivered_at_seconds = event_time
+        award.status = "DELIVERED"
+        self._complete_tender_if_delivered(db, tender, event_time)
+        self._write_snapshots(db, event_time)
 
-    def _open_needed_tenders(self, db, now: Decimal) -> None:
-        product_ids = db.scalars(select(Product.id).order_by(Product.id)).all()
-        for product_id in product_ids:
-            # Ayar API'si ile aynı ürün üzerinde yarışmamak için ürün satırını
-            # aktif süreç kontrolünden ve ihale eklemeden önce kilitle.
-            product = db.get(Product, product_id, with_for_update=True)
-            if product is None:
-                continue
-            if now < Decimal(product.next_eligible_at_seconds):
-                continue
-            active = db.scalar(
-                select(Tender.id).where(
-                    Tender.product_id == product.id,
-                    Tender.status.in_(ACTIVE_STATUSES),
-                ).limit(1)
-            )
-            if active is not None:
-                continue
-            if coverage_minutes(
-                Decimal(product.current_stock_kg),
-                Decimal(product.consumption_kg_per_min),
-            ) > Decimal(product.critical_coverage_minutes):
-                continue
-            rules = [
-                rule for rule in product.npc_rules
-                if rule.is_invited
-            ]
-            if not rules:
-                continue
-            tender = Tender(
-                code="TEMP",
-                product_id=product.id,
-                quantity_ton=tender_quantity_ton(
-                    Decimal(product.current_stock_kg),
-                    Decimal(product.consumption_kg_per_min),
-                    Decimal(product.target_coverage_minutes),
-                ),
-                status="OPEN",
-                opened_at_seconds=now,
-                offer_closes_at_seconds=now + Decimal(product.offer_window_seconds),
-                evaluate_at_seconds=now + Decimal(product.offer_window_seconds) + Decimal("10"),
-                created_at=datetime.utcnow(),
-            )
-            db.add(tender)
-            db.flush()
-            tender.code = f"YEM-{tender.id:06d}"
-            for rule in rules:
-                plan = schedule_response(
-                    now,
-                    tender.offer_closes_at_seconds,
-                    Decimal(rule.response_probability),
-                    self.rng,
+    def _complete_tender_if_delivered(self, db, tender: Tender, event_time: Decimal) -> None:
+        if tender.status != "AWARDED":
+            return
+        awards = tender.awards
+        if awards and all(award.status == "DELIVERED" for award in awards):
+            tender.status = "DELIVERED"
+            tender.delivered_at_seconds = event_time
+
+    def _write_snapshots(self, db, at_seconds: Decimal) -> None:
+        """Tüm ürünler için aynı simülasyon anında tek satırlık anlık görüntü yazar."""
+        exists = db.scalar(
+            select(StockSnapshot.id).where(StockSnapshot.elapsed_seconds == at_seconds).limit(1)
+        )
+        if exists is not None:
+            return
+        for product in db.scalars(select(Product).order_by(Product.id)).all():
+            stock = Decimal(product.current_stock_kg)
+            avg_cost = Decimal(product.avg_cost_per_kg)
+            db.add(
+                StockSnapshot(
+                    elapsed_seconds=at_seconds,
+                    product_id=product.id,
+                    stock_kg=stock,
+                    avg_cost_per_kg=avg_cost,
+                    value_tl=(stock * avg_cost).quantize(FOUR_PLACES, rounding=ROUND_HALF_UP),
                 )
-                db.add(
-                    TenderParticipation(
-                        tender_id=tender.id,
-                        npc_supplier_id=rule.npc_supplier_id,
-                        response_probability=rule.response_probability,
-                        min_price=rule.min_price,
-                        max_price=rule.max_price,
-                        min_delivery_minutes=rule.min_delivery_minutes,
-                        max_delivery_minutes=rule.max_delivery_minutes,
-                        will_respond=plan.will_respond,
-                        response_at_seconds=plan.response_at_seconds,
-                        has_offer=False,
-                        decision="PENDING",
-                    )
-                )
+            )
+        db.flush()
+        if int(at_seconds) % SNAPSHOT_PRUNE_EVERY == 0:
+            self._prune_snapshots(db)
+
+    def _prune_snapshots(self, db) -> None:
+        """Ürün başına yaklaşık SNAPSHOT_RETENTION nokta kalacak şekilde eskileri siler.
+
+        Tüm ürünler aynı anlarda yazıldığı için yaş eşiği ürün başına satır
+        sayısını da sınırlar; her tick'te değil, seyrek çalışır.
+        """
+        threshold = db.scalar(
+            select(StockSnapshot.elapsed_seconds)
+            .group_by(StockSnapshot.elapsed_seconds)
+            .order_by(StockSnapshot.elapsed_seconds.desc())
+            .offset(SNAPSHOT_RETENTION - 1)
+            .limit(1)
+        )
+        if threshold is not None:
+            db.execute(delete(StockSnapshot).where(StockSnapshot.elapsed_seconds < threshold))

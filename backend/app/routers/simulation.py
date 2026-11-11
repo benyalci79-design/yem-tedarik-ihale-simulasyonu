@@ -1,8 +1,11 @@
+from decimal import Decimal
+
 from fastapi import APIRouter
 
 from app.db import SessionLocal
 from app.models import SimulationState
 from app.runtime import engine
+from app.schemas import SpeedRequest
 
 router = APIRouter(prefix="/api/v1/simulation", tags=["simulation"])
 
@@ -11,6 +14,7 @@ def serialize_state(state) -> dict:
     return {
         "is_running": bool(state.is_running),
         "elapsed_seconds": str(state.elapsed_seconds),
+        "speed": str(state.speed_multiplier),
         "last_error": state.last_error,
     }
 
@@ -32,3 +36,8 @@ def start_simulation() -> dict:
 @router.post("/pause")
 def pause_simulation() -> dict:
     return serialize_state(engine.pause())
+
+
+@router.post("/speed")
+def set_simulation_speed(payload: SpeedRequest) -> dict:
+    return serialize_state(engine.set_speed(Decimal(payload.speed)))
