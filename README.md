@@ -22,6 +22,15 @@ Health: http://localhost:8080/api/v1/health
 
 Swagger: http://localhost:8080/api/docs
 
+Angular'ı Docker dışında çalıştırmak isterseniz backend ve veritabanını Compose ile başlatın, ardından ayrı bir PowerShell penceresinde:
+
+```powershell
+cd frontend
+npm start
+```
+
+Bu komut `frontend/proxy.conf.json` üzerinden `/api` isteklerini `http://localhost:8000` adresindeki backend'e yönlendirir. Kullanıcı arayüzü `http://localhost:4200` adresinden açılır.
+
 Kodun çalışması için hostta Python, Node veya MariaDB gerekmez. Gerçek `.env` dosyası git'e eklenmez.
 
 ## Katmanlar
