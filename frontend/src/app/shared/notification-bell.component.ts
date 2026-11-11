@@ -45,7 +45,7 @@ const STORAGE_KEY = 'yem-notifications-read';
     </div>
   `,
   styles: [
-    '.bell-wrap { position:relative; display:inline-flex; }',
+    '.bell-wrap { position:relative; display:inline-flex; flex-shrink:0; }',
     '.bell { position:relative; display:grid; place-items:center; width:2.1rem; height:2.1rem; border-radius:.55rem; border:1px solid #374151; background:#1f2937; color:#d1d5db; cursor:pointer; }',
     '.bell:hover { background:#374151; color:#fff; }.bell.has-unread { color:#fff; border-color:#1d4ed8; }',
     '.badge { position:absolute; top:-.35rem; right:-.35rem; min-width:1.15rem; height:1.15rem; padding:0 .25rem; border-radius:999px; background:#dc2626; color:#fff; font-size:.68rem; font-weight:800; display:grid; place-items:center; }',
