@@ -14,7 +14,7 @@ import {
   StockMetrics,
   TenderSummary,
 } from '../../core/models';
-import { numberTr, simDurationShort, statusLabel } from '../../shared/display';import { LineChartComponent } from '../../shared/line-chart.component';
+import { numberTr, simCalendarText, simDurationShort, statusLabel } from '../../shared/display';import { LineChartComponent } from '../../shared/line-chart.component';
 
 const CHART_COLORS = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9', '#D55E00'];
 const CHART_DASHES = ['', '8 5', '2 4', '12 4 2 4', '10 6', '4 3'];
@@ -35,7 +35,7 @@ const CHART_MARKERS: ChartSeries['marker'][] = ['circle', 'square', 'triangle', 
     <div *ngIf="loading && !simulation" class="skeleton-grid"><div class="skeleton" *ngFor="let item of [1, 2, 3]"></div></div>
 
     <ng-container *ngIf="simulation as state">
-      <section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ state.elapsed_display }}</strong><span class="hero-caption">{{ activityHeadline }}</span></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section>
+      <section class="hero-status"><div><span class="eyebrow">SİMÜLASYON SAATİ</span><strong>{{ clockDate }} <small class="hero-clock">{{ clockTime }}</small></strong><span class="hero-caption">{{ activityHeadline }}</span></div><span class="run-state" [class.running]="state.is_running">● {{ state.is_running ? 'Çalışıyor' : 'Duraklatıldı' }}</span></section>
       <div *ngIf="state.last_error" class="alert">{{ state.last_error }}</div>
 
       <section class="summary-grid">
@@ -121,6 +121,12 @@ export class DashboardComponent {
   history: HistoryPoint[] = [];
   loading = true;
   error = '';
+  clockDate = '—';
+  clockTime = '';
+  private anchorSeconds = 0;
+  private anchorTime = performance.now();
+  private running = false;
+  private speed = 1;
   readonly Number = Number;
   readonly numberTr = numberTr;
   readonly flowSteps = ['Simülasyon', 'Stok analizi', 'İhale açılışı', 'Değerlendirme', 'Teslimat'];
@@ -128,6 +134,9 @@ export class DashboardComponent {
   constructor() {
     this.startPolling();
     this.startMetricsPolling();
+    timer(0, 1000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.tickClock());
   }
 
   get activeTenders(): TenderSummary[] {
@@ -304,6 +313,21 @@ export class DashboardComponent {
 
   private setSimulation(state: SimulationState): void {
     this.simulation = state;
+    this.anchorSeconds = Number(state.elapsed_seconds) || 0;
+    this.anchorTime = performance.now();
+    this.running = state.is_running;
+    this.speed = Number(state.speed) || 1;
+    const text = simCalendarText(this.anchorSeconds);
+    this.clockDate = text.date;
+    this.clockTime = text.time;
+  }
+
+  private tickClock(): void {
+    if (!this.simulation) return;
+    const elapsed = this.anchorSeconds + (this.running ? ((performance.now() - this.anchorTime) / 1000) * this.speed : 0);
+    const text = simCalendarText(elapsed);
+    this.clockDate = text.date;
+    this.clockTime = text.time;
   }
 
   private buildSeries(

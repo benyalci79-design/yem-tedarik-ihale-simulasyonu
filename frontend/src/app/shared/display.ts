@@ -4,7 +4,7 @@ export const MONTHS_PER_YEAR = 12;
 export const SECONDS_PER_MONTH = SECONDS_PER_DAY * DAYS_PER_MONTH;
 export const SECONDS_PER_YEAR = SECONDS_PER_MONTH * MONTHS_PER_YEAR;
 
-export function simDurationShort(totalSeconds: string | number): string {
+export function simCalendarText(totalSeconds: string | number): { date: string; time: string; combined: string } {
   const total = Math.max(0, Number(totalSeconds) || 0);
   const years = Math.floor(total / SECONDS_PER_YEAR);
   let rest = total - years * SECONDS_PER_YEAR;
@@ -21,8 +21,13 @@ export function simDurationShort(totalSeconds: string | number): string {
   if (years) parts.push(`${years} yıl`);
   if (months) parts.push(`${months} ay`);
   if (days || parts.length === 0) parts.push(`${days} gün`);
-  parts.push(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
-  return parts.join(' ');
+  const date = parts.join(' ');
+  const time = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return { date, time, combined: `${date} ${time}` };
+}
+
+export function simDurationShort(totalSeconds: string | number): string {
+  return simCalendarText(totalSeconds).combined;
 }
 
 export function numberTr(value: string | number, digits = 2): string {

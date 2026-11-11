@@ -50,3 +50,5 @@
 .budget-edit .button.primary { background:#1d4ed8; color:#fff; }
 .budget-edit .button.ghost { background:#e2e8f0; color:#1e293b; }
 .budget-edit .error { color:#991b1b; font-weight:700; font-size:.85rem; }
+.hero-clock { font-size:1rem; font-weight:600; color:#cbd5e1; margin-left:.45rem; }
+

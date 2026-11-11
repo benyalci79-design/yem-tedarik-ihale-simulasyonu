@@ -1,10 +1,10 @@
-import { CommonModule } from '@angular/common';
+﻿import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, HostListener, inject } from '@angular/core';
 import { catchError, EMPTY, finalize, switchMap, timer } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ApiService, apiErrorMessage } from '../core/api.service';
 import { SimulationState } from '../core/models';
-import { numberTr } from './display';
+import { simCalendarText } from './display';
 
 @Component({
   selector: 'app-simulation-controls',
@@ -12,10 +12,10 @@ import { numberTr } from './display';
   imports: [CommonModule],
   template: `
     <div class="sim-controls">
-      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.elapsed_display ?? 'Simülasyon saati'">
-        <i></i>{{ state?.elapsed_short || '—' }}
+      <span class="sim-clock" [class.paused]="!state?.is_running" [title]="state?.elapsed_display ?? 'SimÃ¼lasyon saati'">
+        <i></i>{{ clockText }}
       </span>
-      <div class="segmented" role="group" aria-label="Simülasyon hızı">
+      <div class="segmented" role="group" aria-label="SimÃ¼lasyon hÄ±zÄ±">
         <button type="button" [class.active]="stopped" [disabled]="pending" (click)="stop()">Dur</button>
         <button
           *ngFor="let speed of speeds"
@@ -25,22 +25,22 @@ import { numberTr } from './display';
           (click)="setSpeed(speed)"
         >{{ speedLabel(speed) }}</button>
       </div>
-      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="Simülasyonu başlangıç durumuna döndür">Sıfırla</button>
+      <button type="button" class="reset-button" [disabled]="pending" (click)="askReset()" title="SimÃ¼lasyonu baÅŸlangÄ±Ã§ durumuna dÃ¶ndÃ¼r">SÄ±fÄ±rla</button>
       <span class="sim-error" *ngIf="error">{{ error }}</span>
     </div>
 
     <div class="modal-backdrop" *ngIf="resetOpen" (click)="cancelReset()">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-title" (click)="$event.stopPropagation()">
-        <h2 id="reset-title">Simülasyonu sıfırlamak istediğinize emin misiniz?</h2>
+        <h2 id="reset-title">SimÃ¼lasyonu sÄ±fÄ±rlamak istediÄŸinize emin misiniz?</h2>
         <p>
-          Tüm ihaleler, teklifler, teslimatlar ve stok geçmişi silinip yerine demo geçmişi
-          (geçmiş alımlar) yüklenecek. Ürün, NPC ve nakliyeci ayarları başlangıç değerlerine
-          dönecek; simülasyon duraklatılacak. <strong>Bu işlem geri alınamaz.</strong>
+          TÃ¼m ihaleler, teklifler, teslimatlar ve stok geÃ§miÅŸi silinip yerine demo geÃ§miÅŸi
+          (geÃ§miÅŸ alÄ±mlar) yÃ¼klenecek. ÃœrÃ¼n, NPC ve nakliyeci ayarlarÄ± baÅŸlangÄ±Ã§ deÄŸerlerine
+          dÃ¶necek; simÃ¼lasyon duraklatÄ±lacak. <strong>Bu iÅŸlem geri alÄ±namaz.</strong>
         </p>
         <div class="modal-actions">
-          <button type="button" class="button ghost" [disabled]="resetting" (click)="cancelReset()">Vazgeç</button>
+          <button type="button" class="button ghost" [disabled]="resetting" (click)="cancelReset()">VazgeÃ§</button>
           <button type="button" class="button danger" [disabled]="resetting" (click)="confirmReset()">
-            {{ resetting ? 'Sıfırlanıyor…' : 'Evet, sıfırla' }}
+            {{ resetting ? 'SÄ±fÄ±rlanÄ±yorâ€¦' : 'Evet, sÄ±fÄ±rla' }}
           </button>
         </div>
         <p class="modal-error" *ngIf="resetError">{{ resetError }}</p>
@@ -78,13 +78,17 @@ export class SimulationControlsComponent {
   private readonly api = inject(ApiService);
   private readonly destroyRef = inject(DestroyRef);
   readonly speeds = ['0.5', '1', '2', '3'];
-  readonly numberTr = numberTr;
   state: SimulationState | null = null;
+  clockText = 'â€”';
   pending = false;
   error = '';
   resetOpen = false;
   resetting = false;
   resetError = '';
+  private anchorSeconds = 0;
+  private anchorTime = performance.now();
+  private running = false;
+  private speed = 1;
 
   constructor() {
     timer(0, 2000)
@@ -93,6 +97,9 @@ export class SimulationControlsComponent {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe((state) => this.apply(state));
+    timer(0, 1000)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.tickClock());
   }
 
   @HostListener('document:keydown.escape')
@@ -123,7 +130,7 @@ export class SimulationControlsComponent {
       .pipe(finalize(() => (this.pending = false)))
       .subscribe({
         next: (state) => this.apply(state),
-        error: () => (this.error = 'Durdurulamadı'),
+        error: () => (this.error = 'DurdurulamadÄ±'),
       });
   }
 
@@ -136,7 +143,7 @@ export class SimulationControlsComponent {
       .pipe(finalize(() => (this.pending = false)))
       .subscribe({
         next: (state) => this.apply(state),
-        error: () => (this.error = 'Hız değiştirilemedi'),
+        error: () => (this.error = 'HÄ±z deÄŸiÅŸtirilemedi'),
       });
   }
 
@@ -164,12 +171,24 @@ export class SimulationControlsComponent {
           window.location.assign('/');
         },
         error: (error: unknown) => {
-          this.resetError = apiErrorMessage(error, 'Sıfırlama başarısız oldu.');
+          this.resetError = apiErrorMessage(error, 'SÄ±fÄ±rlama baÅŸarÄ±sÄ±z oldu.');
         },
       });
   }
 
+  private tickClock(): void {
+    if (!this.state) return;
+    const elapsed = this.anchorSeconds + (this.running ? ((performance.now() - this.anchorTime) / 1000) * this.speed : 0);
+    this.clockText = simCalendarText(elapsed).combined;
+  }
+
   private apply(state: SimulationState): void {
     this.state = state;
+    this.anchorSeconds = Number(state.elapsed_seconds) || 0;
+    this.anchorTime = performance.now();
+    this.running = state.is_running;
+    this.speed = Number(state.speed) || 1;
+    this.clockText = simCalendarText(this.anchorSeconds).combined;
   }
 }
+

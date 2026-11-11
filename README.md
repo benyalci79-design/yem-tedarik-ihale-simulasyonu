@@ -67,7 +67,7 @@ Backend ve MariaDB host portu açmaz; yalnız Nginx 127.0.0.1:8080 üzerinden ya
 Simülasyon saati gerçek zamandan bağımsız, hızlandırılmış bir takvimle gösterilir:
 
 - 1 sim günü = 30 saniye, 1 ay = 30 gün = 900 saniye, 1 yıl = 12 ay = 10.800 saniye.
-- Simülasyon süresi `X yıl Y ay Z gün SS:DD:SS` biçiminde gösterilir (üst bar kısa, Özet tam biçim).
+- Simülasyon süresi `X yıl Y ay Z gün SS:DD` biçiminde gösterilir (üst bar ve Özet); tam kırılım (`SS:DD:SS`) ipucu metnindedir. Saat istemcide her saniye yumuşak biçimde akar (2 saniyelik sunucu yoklaması araya interpolasyonla doldurulur).
 - Mevsim döngüsü bir sim yılıdır (10.800 sn); yani her mevsim ~2.700 sn sürer ve timeline otomatik ilerler.
 - Bütçe dönemi bir sim ayıdır (900 sn).
 - Demo başlangıcı 1.750 sn'dir (1 ay 28 gün); geçmiş alımlar bu tarihten öncedir.
@@ -204,6 +204,7 @@ Her madde, yanında yazan komut/doğrulama ile çalıştırıldı.
 20. **PASS** — İzole dev ortamı: 18080/18000 ayrı stack ve ayrı veritabanı; ana demo 8080 sağlıklı kaldı.
 21. **PASS** — Mevsim timeline'ı: 0,75'e sürüklendiğinde `season_progress=0.7500`, etiket "Kış" oldu ve sunucuya yazıldı; 3x hızda 10 sn'de ilerleme 0 → 0,0076 (otomatik akış); üst bar `position: sticky` doğrulandı.
 22. **PASS** — Takvim gösterimi: 1.750 sn için `elapsed_display="1 ay 28 gün 08:00:00"`, kısa biçim `"1 ay 28 gün 08:00"`; grafiklerin x ekseni de aynı kısa takvim biçimini kullanıyor.
+23. **PASS** — Akıcı saat: 3x hızda 1 saniyelik örneklerde `2 ay 15:44 → 16:46 → 19:05 → 21:42` şeklinde her saniye ilerledi (2 saniyelik sıçrama yok), konsol hatası yok.
 
 ## Veri kalıcılığı
 
